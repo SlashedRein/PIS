@@ -139,7 +139,7 @@ $result_detail_produk = $conn->query($query_detail_produk);
             </div>
         </div>
         
-        <div class="sidebar-footer">
+        <!-- <div class="sidebar-footer">
             <div class="user-profile">
                 <div class="user-avatar">
                     <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
@@ -149,22 +149,45 @@ $result_detail_produk = $conn->query($query_detail_produk);
                     <p class="role"><?php echo ucfirst($_SESSION['role']); ?></p>
                 </div>
             </div>
-        </div>
+        </div> -->
     </div>
     
     <!-- Main Content -->
     <div class="main-content">
         <!-- Topbar -->
-        <div class="topbar">
-            <div class="topbar-content">
-                <div class="page-title">
-                    <h4>Dashboard</h4>
-                    <p>Selamat datang kembali, <?php echo $_SESSION['nama_lengkap']; ?>! 👋</p>
+                <div class="topbar">
+            <div class="page-title">
+                <h4>Dashboard Overview</h4>
+                <p>Selamat datang kembali, <?php echo $_SESSION['nama_lengkap']; ?>! 👋</p>
+            </div>
+            
+            <div class="user-dropdown-container">
+                <div class="user-profile">
+                    <div class="user-info">
+                        <span class="name"><?php echo $_SESSION['nama_lengkap']; ?></span>
+                        <span class="role"><?php echo ucfirst($_SESSION['role']); ?></span>
+                    </div>
+                    <div class="user-avatar">
+                        <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
+                    </div>
+                    <i class="bi bi-chevron-down profile-arrow"></i>
                 </div>
-                <a href="../logout.php" class="btn-logout">
-                    <i class="bi bi-box-arrow-right"></i>
-                    <span>Logout</span>
-                </a>
+                
+                <div class="dropdown-menu-custom">
+                    <div style="padding: 10px 15px; font-size: 11px; color: #aaa; font-weight: 600;">
+                        ACCOUNT SETTINGS
+                    </div>
+                    <a href="#" class="dropdown-item-custom">
+                        <i class="bi bi-person"></i> Profil Saya
+                    </a>
+                    <a href="#" class="dropdown-item-custom">
+                        <i class="bi bi-gear"></i> Pengaturan
+                    </a>
+                    
+                    <a href="../logout.php" class="dropdown-item-custom logout" onclick="return confirm('Yakin ingin keluar dari sistem?')">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </a>
+                </div>
             </div>
         </div>
         

@@ -2,16 +2,20 @@
 session_start();
 require_once '../../config/database.php';
 
+// Cek Login
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login.php");
+    header("Location: ../../login.php");
     exit();
 }
 
-// Handle Delete
+$success = '';
+$error = '';
+
+// --- 1. LOGIKA DELETE ---
 if (isset($_GET['delete'])) {
     $id = clean_input($_GET['delete']);
     
-    // Cek apakah customer dipakai di penjualan
+    // Cek apakah customer dipakai di penjualan (Foreign Key Check)
     $check_query = "SELECT COUNT(*) as count FROM penjualan WHERE id_cust = ?";
     $stmt = $conn->prepare($check_query);
     $stmt->bind_param("i", $id);
@@ -19,152 +23,372 @@ if (isset($_GET['delete'])) {
     $check = $stmt->get_result()->fetch_assoc();
     
     if ($check['count'] > 0) {
-        $error = "Customer tidak bisa dihapus karena masih terdapat transaksi penjualan terkait!";
+        $error = "Gagal: Customer tidak bisa dihapus karena memiliki riwayat transaksi penjualan!";
     } else {
         $delete_query = "DELETE FROM customer WHERE id_cust = ?";
         $stmt = $conn->prepare($delete_query);
         $stmt->bind_param("i", $id);
         
         if ($stmt->execute()) {
-            $success = "Customer berhasil dihapus!";
+            $success = "Data customer berhasil dihapus!";
+            header("refresh:1;url=index.php");
         } else {
-            $error = "Gagal menghapus customer!";
+            $error = "Gagal menghapus data.";
         }
     }
 }
 
-// Ambil semua data customer
+// --- 2. LOGIKA CREATE (TAMBAH DATA VIA POP-UP) ---
+if (isset($_POST['create_customer'])) {
+    $nama    = clean_input($_POST['nama']);
+    $alamat  = clean_input($_POST['alamat']);
+    $no_telp = clean_input($_POST['no_telp']);
+
+    if (empty($nama)) {
+        $error = "Nama customer wajib diisi!";
+    } else {
+        $insert_query = "INSERT INTO customer (nama, alamat, no_telp) VALUES (?, ?, ?)";
+        $stmt = $conn->prepare($insert_query);
+        $stmt->bind_param("sss", $nama, $alamat, $no_telp);
+        
+        if ($stmt->execute()) {
+            $success = "Customer berhasil ditambahkan!";
+            header("refresh:1;url=index.php");
+        } else {
+            $error = "Gagal menambah data: " . $conn->error;
+        }
+    }
+}
+
+// --- 3. LOGIKA UPDATE (EDIT DATA VIA POP-UP) ---
+if (isset($_POST['update_customer'])) {
+    $id_cust = clean_input($_POST['id_cust']);
+    $nama    = clean_input($_POST['nama']);
+    $alamat  = clean_input($_POST['alamat']);
+    $no_telp = clean_input($_POST['no_telp']);
+
+    if (empty($nama)) {
+        $error = "Nama customer wajib diisi!";
+    } else {
+        $update_query = "UPDATE customer SET nama=?, alamat=?, no_telp=? WHERE id_cust=?";
+        $stmt = $conn->prepare($update_query);
+        $stmt->bind_param("sssi", $nama, $alamat, $no_telp, $id_cust);
+        
+        if ($stmt->execute()) {
+            $success = "Data customer berhasil diperbarui!";
+            header("refresh:1;url=index.php");
+        } else {
+            $error = "Gagal update data: " . $conn->error;
+        }
+    }
+}
+
+// Ambil Data Customer
 $query = "SELECT * FROM customer ORDER BY nama ASC";
 $result = $conn->query($query);
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Customer - Dewi Cookies</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="../../assets/css/custom.css">
+
     <style>
-        * {margin: 0;padding: 0;box-sizing: border-box;}
-        body {font-family: 'Poppins', sans-serif;background: linear-gradient(135deg, #FFF8DC 0%, #F5DEB3 100%);min-height: 100vh;}
-        .sidebar {position: fixed;left: 0;top: 0;width: 80px;height: 100vh;background: linear-gradient(180deg, #6F3410 0%, #8B4513 100%);color: #FFF8DC;padding: 20px 10px;overflow: hidden;box-shadow: 4px 0 20px rgba(0,0,0,0.1);z-index: 1000;transition: width 0.3s ease;}
-        .sidebar:hover {width: 270px;overflow-y: auto;}
-        .logo {text-align: center;padding-bottom: 20px;border-bottom: 2px solid rgba(255,248,220,0.2);margin-bottom: 20px;white-space: nowrap;}
-        .logo-icon {font-size: 2.5rem;display: inline-block;animation: bounce 2s ease-in-out infinite;}
-        @keyframes bounce {0%, 100% {transform: translateY(0);}50% {transform: translateY(-8px);}}
-        .logo h2 {font-family: 'Playfair Display', serif;font-size: 1.5rem;margin-top: 10px;text-shadow: 2px 2px 4px rgba(0,0,0,0.3);opacity: 0;transition: opacity 0.3s ease;}
-        .sidebar:hover .logo h2 {opacity: 1;}
-        .menu-section {margin-bottom: 20px;}
-        .menu-section-title {font-size: 0.7rem;text-transform: uppercase;letter-spacing: 1px;color: rgba(255,248,220,0.6);margin-bottom: 8px;padding-left: 15px;font-weight: 600;white-space: nowrap;opacity: 0;transition: opacity 0.3s ease;}
-        .sidebar:hover .menu-section-title {opacity: 1;}
-        .menu-item {padding: 12px 15px;margin: 5px 0;border-radius: 12px;cursor: pointer;transition: all 0.3s;color: #FFF8DC;text-decoration: none;display: flex;align-items: center;gap: 12px;font-weight: 500;white-space: nowrap;}
-        .menu-item:hover {background: rgba(255,248,220,0.15);}
-        .sidebar:hover .menu-item:hover {transform: translateX(5px);}
-        .menu-item.active {background: rgba(255,248,220,0.25);box-shadow: 0 4px 12px rgba(0,0,0,0.2);}
-        .menu-icon {font-size: 1.3rem;min-width: 1.3rem;text-align: center;}
-        .menu-text {opacity: 0;transition: opacity 0.3s ease;}
-        .sidebar:hover .menu-text {opacity: 1;}
-        .user-info {position: absolute;bottom: 20px;left: 10px;right: 10px;padding: 15px;background: rgba(255,248,220,0.15);border-radius: 15px;text-align: center;}
-        .user-avatar {width: 40px;height: 40px;background: linear-gradient(135deg, #FFF8DC, #F5DEB3);border-radius: 50%;display: flex;align-items: center;justify-content: center;font-size: 1.3rem;margin: 0 auto 10px;}
-        .user-details {opacity: 0;transition: opacity 0.3s ease;white-space: nowrap;}
-        .sidebar:hover .user-details {opacity: 1;}
-        .user-name {font-weight: 600;font-size: 0.9rem;}
-        .user-role {font-size: 0.75rem;opacity: 0.8;margin-top: 3px;}
-        .main-content {margin-left: 80px;padding: 25px;min-height: 100vh;}
-        .header {background: white;padding: 25px 30px;border-radius: 20px;margin-bottom: 25px;box-shadow: 0 4px 20px rgba(111,52,16,0.08);display: flex;justify-content: space-between;align-items: center;}
-        .header h1 {font-family: 'Playfair Display', serif;color: #6F3410;font-size: 2rem;display: flex;align-items: center;gap: 10px;}
-        .header p {color: #8B4513;margin-top: 5px;font-size: 0.95rem;}
-        .btn {padding: 10px 20px;border: none;border-radius: 12px;cursor: pointer;text-decoration: none;display: inline-block;font-size: 0.9rem;font-weight: 600;transition: all 0.3s;}
-        .btn-primary {background: linear-gradient(135deg, #8B4513, #6F3410);color: #FFF8DC;box-shadow: 0 4px 15px rgba(139,69,19,0.3);}
-        .btn-primary:hover {transform: translateY(-2px);box-shadow: 0 6px 20px rgba(139,69,19,0.4);}
-        .btn-warning {background: linear-gradient(135deg, #ffbb33, #ff9800);color: white;}
-        .btn-danger {background: linear-gradient(135deg, #ff4444, #dc3545);color: white;}
-        .btn-sm {padding: 6px 14px;font-size: 0.85rem;}
-        .content-box {background: white;padding: 25px;border-radius: 18px;box-shadow: 0 4px 20px rgba(111,52,16,0.08);}
-        table {width: 100%;border-collapse: collapse;margin-top: 20px;}
-        th, td {padding: 14px 12px;text-align: left;border-bottom: 1px solid #f0f0f0;}
-        th {background: linear-gradient(135deg, #FFF8DC, #F5DEB3);font-weight: 600;color: #6F3410;font-family: 'Playfair Display', serif;font-size: 1rem;}
-        tbody tr {transition: all 0.3s;}
-        tbody tr:hover {background: linear-gradient(135deg, #FFF8DC 0%, #F5DEB3 30%);transform: translateX(5px);}
-        td {color: #6F3410;}
-        .alert {padding: 15px 20px;border-radius: 12px;margin-bottom: 20px;display: flex;align-items: center;gap: 10px;}
-        .alert-success {background: linear-gradient(135deg, #d4edda, #c3e6cb);color: #155724;border-left: 4px solid #28a745;}
-        .alert-error {background: linear-gradient(135deg, #f8d7da, #f5c6cb);color: #721c24;border-left: 4px solid #dc3545;}
-        .no-data {text-align: center;padding: 50px 20px;color: #8B4513;}
-        .no-data-icon {font-size: 4rem;margin-bottom: 15px;}
+        .modal-header {
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        .modal-title { font-weight: 700; font-family: 'Playfair Display', serif; }
+        .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+        .form-label { font-weight: 600; color: var(--primary-color); }
     </style>
 </head>
 <body>
+
     <div class="sidebar">
-        <div class="logo"><div class="logo-icon">🍪</div><h2>Dewi Cookies</h2></div>
-        <div class="menu-section">
-            <div class="menu-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="menu-item"><span class="menu-icon">📊</span><span class="menu-text">Dashboard</span></a>
+        <div class="sidebar-header">
+            <div class="logo-icon">🍪</div>
+            <div class="logo-text" style="margin-left: 10px;">
+                <h5 style="margin:0; font-size:16px; font-weight:700;">Dewi Cookies</h5>
+                <small style="opacity:0.7; font-size:11px;">Management System</small>
+            </div>
         </div>
-        <div class="menu-section">
-            <div class="menu-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="menu-item"><span class="menu-icon">🏭</span><span class="menu-text">Supplier</span></a>
-            <a href="index.php" class="menu-item active"><span class="menu-icon">👥</span><span class="menu-text">Customer</span></a>
+        
+         <div class="sidebar-nav">
+            <div class="nav-section-title">Main Menu</div>
+            <a href="../dashboard.php" class="nav-link">
+                <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+            </a>
+            
+            <div class="nav-section-title">Master Data</div>
+            <a href="index.php" class="nav-link active">
+                <i class="bi bi-building"></i> <span>Supplier</span>
+            </a>
+            <a href="../customer/index.php" class="nav-link">
+                <i class="bi bi-people"></i> <span>Customer</span>
+            </a>
+
+            <div class="nav-section-title">Inventory</div>
+            <a href="../bahan-baku/index.php" class="nav-link">
+                <i class="bi bi-box-seam"></i> <span>Bahan Baku</span>
+            </a>
+            <a href="../produk/index.php" class="nav-link">
+                <i class="bi bi-grid"></i> <span>Produk</span>
+            </a>
+             <a href="../resep/index.php" class="nav-link">
+                <i class="bi bi-journal-text"></i> <span>Resep</span>
+            </a>
         </div>
-        <div class="user-info">
-            <div class="user-avatar">👤</div>
-            <div class="user-details">
-                <div class="user-name"><?php echo $_SESSION['nama_lengkap']; ?></div>
-                <div class="user-role"><?php echo ucfirst($_SESSION['role']); ?></div>
+
+        <div class="nav-section">
+                <div class="nav-section-title">Transaksi</div>
+                <div class="nav-item">
+                    <a href="pembelian/index.php" class="nav-link">
+                        <i class="bi bi-cart-plus"></i>
+                        <span>Pembelian</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="penjualan/index.php" class="nav-link">
+                        <i class="bi bi-cash-coin"></i>
+                        <span>Penjualan</span>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">Reports</div>
+                <div class="nav-item">
+                    <a href="laporan/index.php" class="nav-link">
+                        <i class="bi bi-graph-up"></i>
+                        <span>Laporan</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="user-avatar">
+                    <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
+                </div>
+                <div class="user-info">
+                    <p class="name"><?php echo $_SESSION['nama_lengkap']; ?></p>
+                    <p class="role"><?php echo ucfirst($_SESSION['role']); ?></p>
+                </div>
             </div>
         </div>
     </div>
-    
+
     <div class="main-content">
-        <div class="header">
-            <div><h1><span>👥</span> Customer</h1><p>Kelola data customer/pelanggan</p></div>
-            <a href="tambah.php" class="btn btn-primary">➕ Tambah Customer</a>
-        </div>
         
-        <div class="content-box">
-            <?php if (isset($success)): ?>
-                <div class="alert alert-success"><span style="font-size: 1.5rem;">✅</span><span><?php echo $success; ?></span></div>
+        <div class="topbar">
+            <div class="page-title">
+                <h4>Data Customer</h4>
+            </div>
+            
+            <div class="user-dropdown-container">
+                <div class="user-profile">
+                    <div class="user-info">
+                        <span class="name"><?php echo $_SESSION['nama_lengkap']; ?></span>
+                        <span class="role"><?php echo ucfirst($_SESSION['role']); ?></span>
+                    </div>
+                    <div class="user-avatar">
+                        <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
+                    </div>
+                    <i class="bi bi-chevron-down profile-arrow"></i>
+                </div>
+                
+                <div class="dropdown-menu-custom">
+                    <a href="#" class="dropdown-item-custom">
+                        <i class="bi bi-person"></i> Profil Saya
+                    </a>
+                    <a href="../../logout.php" class="dropdown-item-custom logout" onclick="return confirm('Yakin ingin keluar?')">
+                        <i class="bi bi-box-arrow-right"></i> Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            
+            <?php if ($success): ?>
+                <div class="alert alert-success d-flex align-items-center gap-2">
+                    <i class="bi bi-check-circle-fill"></i> <div><?php echo $success; ?></div>
+                </div>
             <?php endif; ?>
             
-            <?php if (isset($error)): ?>
-                <div class="alert alert-error"><span style="font-size: 1.5rem;">❌</span><span><?php echo $error; ?></span></div>
+            <?php if ($error): ?>
+                <div class="alert alert-danger d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i> <div><?php echo $error; ?></div>
+                </div>
             <?php endif; ?>
-            
-            <table>
-                <thead>
-                    <tr><th>No</th><th>Nama Customer</th><th>Alamat</th><th>No Telp</th><th>Aksi</th></tr>
-                </thead>
-                <tbody>
-                    <?php 
-                    $no = 1;
-                    if ($result->num_rows > 0):
-                        while ($row = $result->fetch_assoc()): 
-                    ?>
-                        <tr>
-                            <td><?php echo $no++; ?></td>
-                            <td><strong><?php echo $row['nama']; ?></strong></td>
-                            <td><?php echo $row['alamat'] ?? '-'; ?></td>
-                            <td><?php echo $row['no_telp'] ?? '-'; ?></td>
-                            <td>
-                                <a href="edit.php?id=<?php echo $row['id_cust']; ?>" class="btn btn-warning btn-sm">✏️ Edit</a>
-                                <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('Yakin ingin menghapus?')">🗑️ Hapus</a>
-                            </td>
-                        </tr>
-                    <?php 
-                        endwhile;
-                    else:
-                    ?>
-                        <tr>
-                            <td colspan="5" class="no-data">
-                                <div class="no-data-icon">👥</div>
-                                <strong>Belum ada data customer</strong>
-                                <p style="margin-top: 10px; font-size: 0.9rem;">Klik tombol "Tambah Customer" untuk menambahkan data</p>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+
+            <div class="table-card">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 style="margin:0; font-weight:700; color:var(--primary-color);">Daftar Pelanggan</h5>
+                    <button type="button" class="btn-add" data-bs-toggle="modal" data-bs-target="#addModal">
+                        <i class="bi bi-plus-lg"></i> Tambah Customer
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama Customer</th>
+                                <th>Alamat</th>
+                                <th>No Telp</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php 
+                            $no = 1;
+                            if ($result->num_rows > 0):
+                                while ($row = $result->fetch_assoc()): 
+                            ?>
+                                <tr>
+                                    <td><?php echo $no++; ?></td>
+                                    <td><strong><?php echo htmlspecialchars($row['nama']); ?></strong></td>
+                                    <td><?php echo htmlspecialchars($row['alamat'] ?? '-'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['no_telp'] ?? '-'); ?></td>
+                                    <td>
+                                        <button type="button" class="btn-warning" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editModal"
+                                                data-id="<?php echo $row['id_cust']; ?>"
+                                                data-nama="<?php echo $row['nama']; ?>"
+                                                data-alamat="<?php echo $row['alamat']; ?>"
+                                                data-telp="<?php echo $row['no_telp']; ?>">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+
+                                        <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn-danger" onclick="return confirm('Yakin ingin menghapus customer ini?')">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            <?php endwhile; else: ?>
+                                <tr>
+                                    <td colspan="5" class="text-center py-5">
+                                        <div class="text-muted">
+                                            <i class="bi bi-people" style="font-size: 2rem;"></i><br>
+                                            Belum ada data customer.
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
+
+    <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; overflow: hidden;">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Tambah Customer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="">
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label class="form-label">Nama Customer *</label>
+                            <input type="text" class="form-control" name="nama" placeholder="Contoh: Ibu Sarah" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Alamat</label>
+                            <textarea class="form-control" name="alamat" rows="2" placeholder="Alamat lengkap"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">No Telepon</label>
+                            <input type="text" class="form-control" name="no_telp" placeholder="0812xxxx">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="create_customer" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Simpan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 15px; overflow: hidden;">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Customer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="">
+                    <div class="modal-body p-4">
+                        <input type="hidden" name="id_cust" id="edit_id">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nama Customer *</label>
+                            <input type="text" class="form-control" name="nama" id="edit_nama" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Alamat</label>
+                            <textarea class="form-control" name="alamat" id="edit_alamat" rows="2"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">No Telepon</label>
+                            <input type="text" class="form-control" name="no_telp" id="edit_telp">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="update_customer" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Update Data
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Script untuk mengisi form modal secara otomatis
+        const editModal = document.getElementById('editModal');
+        editModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            
+            // Ambil data dari tombol
+            const id = button.getAttribute('data-id');
+            const nama = button.getAttribute('data-nama');
+            const alamat = button.getAttribute('data-alamat');
+            const telp = button.getAttribute('data-telp');
+            
+            // Isi form di dalam modal
+            document.getElementById('edit_id').value = id;
+            document.getElementById('edit_nama').value = nama;
+            document.getElementById('edit_alamat').value = alamat;
+            document.getElementById('edit_telp').value = telp;
+        });
+    </script>
+
 </body>
 </html>
