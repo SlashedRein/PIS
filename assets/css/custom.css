@@ -6,8 +6,9 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
-        body {
+
+        /* Ubah body menjadi .login-page */
+        body.login-page { 
             font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #FFF8DC 0%, #F5DEB3 50%, #DEB887 100%);
             min-height: 100vh;
@@ -17,7 +18,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+                
         /* Animated Background */
         body::before {
             content: '🍪';

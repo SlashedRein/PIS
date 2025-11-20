@@ -1,5 +1,5 @@
 <?php
-require_once '../config/database.php';
+require_once 'config/database.php';
 session_start();
 
 $error = '';
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $_SESSION['nama_lengkap'] = $user['nama_lengkap'];
             $_SESSION['role'] = $user['role'];
 
-            header("Location: dashboard.php");
+            header("Location: pages/dashboard.php");
             exit();
         } else {
             $error = "Password salah!";
@@ -44,9 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Dewi Cookies Inventory System</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../assets/css/custom.css">    
+    <link rel="stylesheet" href="assets/css/custom.css">    
 </head>
-<body>
+<body class="login-page">
     <div class="login-container">
         <div class="logo">
             <div class="logo-icon">🍪</div>
