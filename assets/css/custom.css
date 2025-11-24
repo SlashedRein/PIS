@@ -1011,3 +1011,86 @@
             padding-top: 1.25rem;
             padding-bottom: 1.25rem;
             }
+
+       /* =========================================
+   FIX: LAYOUT & BUTTONS (FINAL)
+   ========================================= */
+
+:root {
+    --sidebar-width: 260px;
+    --sidebar-collapsed-width: 80px;
+    --topbar-height: 70px;
+    --primary-brown: #8B4513; /* Warna Coklat Dewi Cookies */
+    --primary-brown-hover: #6F3410;
+}
+
+/* 1. TOMBOL KHUSUS (Biar Coklat) */
+.btn-brown {
+    background-color: var(--primary-brown) !important;
+    border-color: var(--primary-brown) !important;
+    color: #fff !important;
+    transition: all 0.2s;
+}
+.btn-brown:hover {
+    background-color: var(--primary-brown-hover) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(139, 69, 19, 0.2);
+}
+
+/* 2. FIX TOMBOL UBAH/ACTION (Biar Bisa Dipencet) */
+.btn-action {
+    position: relative;
+    z-index: 10; /* Pastikan di atas elemen lain */
+    cursor: pointer;
+}
+.btn-action i {
+    pointer-events: none; /* Trik jitu: Ikon tidak bisa diklik, jadi klik tembus ke tombol */
+}
+
+/* 3. SIDEBAR & LAYOUT */
+.sidebar {
+    width: var(--sidebar-width);
+    transition: all 0.3s ease;
+    position: fixed; left: 0; top: 0; bottom: 0;
+    z-index: 1050; /* Lebih tinggi dari konten */
+}
+
+.main-content {
+    margin-left: var(--sidebar-width);
+    transition: all 0.3s ease;
+    width: calc(100% - var(--sidebar-width));
+    position: relative;
+    z-index: 1;
+}
+
+/* Mode Mobile */
+@media (max-width: 991.98px) {
+    .sidebar { left: -280px; }
+    .sidebar.show { left: 0; }
+    .main-content { margin-left: 0 !important; width: 100% !important; }
+    
+    .sidebar-overlay {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5); z-index: 1040;
+        display: none; backdrop-filter: blur(2px);
+    }
+    .sidebar-overlay.show { display: block; }
+}
+
+/* Tombol Toggle */
+.btn-mobile-toggle { display: none; border: none; background: none; font-size: 1.5rem; color: var(--primary-brown); }
+.btn-desktop-toggle { display: block; border: none; background: none; font-size: 1.5rem; color: var(--primary-brown); cursor: pointer; }
+
+@media (max-width: 991.98px) {
+    .btn-mobile-toggle { display: block !important; }
+    .btn-desktop-toggle { display: none !important; }
+}
+
+/* Topbar Styling */
+.topbar {
+    height: var(--topbar-height);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 25px;
+    background: #fff;
+    position: sticky; top: 0; z-index: 999;
+}
