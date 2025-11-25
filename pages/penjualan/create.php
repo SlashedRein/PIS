@@ -2,6 +2,34 @@
 session_start();
 require_once '../../config/database.php';
 
+// --- [LOGIC 1] AJAX HANDLER: TAMBAH CUSTOMER VIA POP-UP ---
+if (isset($_POST['ajax_add_customer'])) {
+    header('Content-Type: application/json');
+    
+    $nama = clean_input($_POST['nama']);
+    $telp = clean_input($_POST['telp']);
+    $alamat = clean_input($_POST['alamat']);
+
+    if (empty($nama)) {
+        echo json_encode(['status' => 'error', 'message' => 'Nama wajib diisi!']);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO customer (nama, no_telp, alamat) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $nama, $telp, $alamat);
+        
+        if ($stmt->execute()) {
+            echo json_encode([
+                'status' => 'success', 
+                'id' => $conn->insert_id, 
+                'nama' => $nama
+            ]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'Gagal simpan database.']);
+        }
+    }
+    exit();
+}
+
+// --- [LOGIC 2] PROSES SIMPAN TRANSAKSI ---
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
     exit();
@@ -9,7 +37,6 @@ if (!isset($_SESSION['user_id'])) {
 
 $error = '';
 
-// --- PROSES SIMPAN ---
 if (isset($_POST['simpan_transaksi'])) {
     $id_cust = clean_input($_POST['id_cust']);
     $tgl     = clean_input($_POST['tgl_penjualan']);
@@ -56,7 +83,7 @@ if (isset($_POST['simpan_transaksi'])) {
             }
 
             $conn->commit();
-            header("Location: nota.php?id=" . $id_penjualan);
+            header("Location: index.php?new_nota=" . $id_penjualan);
             exit();
 
         } catch (Exception $e) {
@@ -66,6 +93,7 @@ if (isset($_POST['simpan_transaksi'])) {
     }
 }
 
+// Ambil Data Awal
 $customers = $conn->query("SELECT * FROM customer ORDER BY nama ASC");
 $products = $conn->query("SELECT * FROM produk WHERE stok > 0 ORDER BY nama_produk ASC");
 $js_products = [];
@@ -78,8 +106,11 @@ while($p = $products->fetch_assoc()) { $js_products[] = $p; }
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Input Penjualan</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
     
@@ -87,8 +118,8 @@ while($p = $products->fetch_assoc()) { $js_products[] = $p; }
         .sidebar { width: 260px; position: fixed; top: 0; left: 0; bottom: 0; transition: transform 0.3s ease-in-out; z-index: 1050; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s ease-in-out; }
         .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1040; cursor: pointer; }
-        #mobile-toggle { display: none; }
-
+        #mobile-toggle, #sidebar-close { display: none; }
+        
         @media (max-width: 992px) {
             .sidebar { transform: translateX(-100%); }
             .main-content { margin-left: 0; }
@@ -96,20 +127,26 @@ while($p = $products->fetch_assoc()) { $js_products[] = $p; }
             body.show-sidebar .sidebar { transform: translateX(0); }
             body.show-sidebar .overlay { display: block; }
         }
-        
-        /* Override Text Color jadi Coklat */
+
         .text-brown { color: var(--primary-color) !important; }
+        
+        /* Select2 Tweak */
+        .select2-container .select2-selection--single { height: 31px !important; font-size: 0.85rem; }
+        .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-top: 2px; }
     </style>
 </head>
 <body>
     <div class="overlay" onclick="toggleSidebar()"></div>
 
     <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text" style="margin-left: 10px;">
-                <h5 style="margin:0; font-size:16px;">Dewi Cookies</h5>
+        <div class="sidebar-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <div class="logo-icon">🍪</div>
+                <div class="logo-text" style="margin-left: 10px;">
+                    <h5 style="margin:0; font-size:16px;">Dewi Cookies</h5>
+                </div>
             </div>
+            <i class="bi bi-x-lg fs-4" id="sidebar-close" onclick="toggleSidebar()"></i>
         </div>
         
         <div class="sidebar-nav">
@@ -157,98 +194,217 @@ while($p = $products->fetch_assoc()) { $js_products[] = $p; }
             <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
             <form method="POST" action="">
-                <div class="row g-4">
-                    <div class="col-md-4">
-                        <div class="content-box h-100">
-                            <h5 class="fw-bold mb-3 text-brown">Pelanggan</h5>
-                            <div class="mb-3">
-                                <label>Tanggal</label>
-                                <input type="date" name="tgl_penjualan" class="form-control" value="<?php echo date('Y-m-d'); ?>" required>
-                            </div>
-                            <div class="mb-3">
-                                <label>Customer</label>
-                                <select name="id_cust" class="form-select" required>
-                                    <option value="">-- Pilih --</option>
-                                    <?php foreach ($customers as $c): ?>
-                                        <option value="<?php echo $c['id_cust']; ?>"><?php echo $c['nama']; ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                <div class="content-box mb-3">
+                    <div class="row align-items-center g-2">
+                        <div class="col-md-4">
+                            <label class="small text-muted fw-bold">Tanggal</label>
+                            <input type="date" name="tgl_penjualan" class="form-control form-control-sm" value="<?php echo date('Y-m-d'); ?>" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="small text-muted fw-bold">Pelanggan</label>
+                            <div class="d-flex gap-2">
+                                <div class="flex-grow-1">
+                                    <select name="id_cust" id="selectCustomer" class="form-select" required>
+                                        <option value="">-- Cari Nama Customer --</option>
+                                        <?php foreach ($customers as $c): ?>
+                                            <option value="<?php echo $c['id_cust']; ?>"><?php echo $c['nama']; ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#addCustomerModal" title="Customer Baru">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <div class="col-md-8">
-                        <div class="content-box h-100">
-                            <div class="d-flex justify-content-between mb-3">
-                                <h5 class="fw-bold text-brown">Keranjang</h5>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRow()">+ Baris</button>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-bordered">
-                                    <thead class="table-light">
-                                        <tr><th width="40%">Produk</th><th width="20%">Harga</th><th width="15%">Qty</th><th width="20%">Subtotal</th><th></th></tr>
-                                    </thead>
-                                    <tbody id="cartBody"></tbody>
-                                    <tfoot>
-                                        <tr>
-                                            <td colspan="3" class="text-end fw-bold pt-3">TOTAL:</td>
-                                            <td colspan="2" class="pt-3"><h5 class="fw-bold text-success" id="grandTotal">Rp 0</h5></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                            <div class="text-end mt-3">
-                                <a href="index.php" class="btn btn-light border">Batal</a>
-                                <button type="submit" name="simpan_transaksi" class="btn btn-primary" onclick="return confirm('Simpan?')">Simpan & Cetak</button>
-                            </div>
-                        </div>
+                <div class="content-box">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold text-brown m-0"><i class="bi bi-cart3"></i> Keranjang</h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem;" onclick="addRow()">
+                            <i class="bi bi-plus-lg"></i> Item
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle mb-0">
+                            <thead class="table-light text-center small">
+                                <tr>
+                                    <th style="width: 35%;">Produk</th>
+                                    <th style="width: 20%;">Harga</th>
+                                    <th style="width: 12%;">Qty</th>
+                                    <th style="width: 23%;">Subtotal</th>
+                                    <th style="width: 10%;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartBody"></tbody>
+                            <tfoot>
+                                <tr class="bg-light">
+                                    <td colspan="3" class="text-end fw-bold py-2 small">TOTAL :</td>
+                                    <td colspan="2" class="py-2 text-end">
+                                        <h5 class="fw-bold text-success m-0" id="grandTotal" style="font-size:1.1rem;">Rp 0</h5>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <a href="index.php" class="btn btn-sm btn-light border px-3">Batal</a>
+                        <button type="submit" name="simpan_transaksi" class="btn btn-sm btn-primary px-3" onclick="return confirm('Simpan transaksi?')">
+                            <i class="bi bi-save"></i> Simpan
+                        </button>
                     </div>
                 </div>
             </form>
         </div>
     </div>
 
+    <div class="modal fade" id="addCustomerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title fw-bold">Tambah Customer Baru</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formAddCustomer">
+                        <div class="mb-2">
+                            <label class="small text-muted">Nama Lengkap *</label>
+                            <input type="text" id="new_nama" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-muted">No. Telepon</label>
+                            <input type="text" id="new_telp" class="form-control form-control-sm">
+                        </div>
+                        <div class="mb-2">
+                            <label class="small text-muted">Alamat</label>
+                            <textarea id="new_alamat" class="form-control form-control-sm" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 mt-2">Simpan & Pilih</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
     <script>
         const products = <?php echo json_encode($js_products); ?>;
 
+        // --- 1. INIT SELECT2 CUSTOMER ---
+        $(document).ready(function() {
+            $('#selectCustomer').select2({
+                theme: 'bootstrap-5',
+                placeholder: '-- Cari Nama Customer --',
+                width: '100%'
+            });
+            // Tambah 1 baris saat load
+            addRow();
+        });
+
+        // --- 2. TAMBAH BARIS PRODUK ---
         function addRow() {
-            const tr = document.createElement('tr');
-            let options = '<option value="">-- Pilih --</option>';
-            products.forEach(p => options += `<option value="${p.id_produk}" data-price="${p.harga_jual}" data-stok="${p.stok}">${p.nama_produk} (Stok: ${p.stok})</option>`);
-            tr.innerHTML = `<td><select name="id_produk[]" class="form-select" required onchange="updateRow(this)">${options}</select></td>
-                            <td><input type="text" class="form-control bg-light price" readonly></td>
-                            <td><input type="number" name="jumlah[]" class="form-control qty" min="1" value="1" onchange="calcTotal()" onkeyup="calcTotal()" required></td>
-                            <td><input type="text" class="form-control bg-light sub" readonly></td>
-                            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove();calcTotal()">x</button></td>`;
-            document.getElementById('cartBody').appendChild(tr);
+            let options = '<option value="">-- Cari Produk --</option>';
+            products.forEach(p => options += `<option value="${p.id_produk}" data-price="${p.harga_jual}" data-stok="${p.stok}">${p.nama_produk}</option>`);
+            
+            const tr = `
+                <tr>
+                    <td>
+                        <select name="id_produk[]" class="form-select form-select-sm select2-produk" required onchange="updateRow(this)">
+                            ${options}
+                        </select>
+                    </td>
+                    <td><input type="text" class="form-control form-control-sm bg-light text-end price" readonly placeholder="0"></td>
+                    <td><input type="number" name="jumlah[]" class="form-control form-control-sm text-center qty" min="1" value="1" onchange="calcTotal()" onkeyup="calcTotal()" required></td>
+                    <td><input type="text" class="form-control form-control-sm bg-light text-end sub" readonly placeholder="0"></td>
+                    <td class="text-center"><button type="button" class="btn btn-sm btn-danger py-0 px-2" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
+                </tr>
+            `;
+            $('#cartBody').append(tr);
+
+            $('.select2-produk:last').select2({
+                theme: 'bootstrap-5',
+                placeholder: '-- Cari Produk --',
+                dropdownCssClass: "select2-sm",
+                width: '100%'
+            });
+        }
+
+        // --- 3. LOGIC HITUNG TOTAL (FIXED) ---
+        function calcTotal() {
+            let total = 0;
+            // jQuery .each() loop yang benar
+            $('#cartBody tr').each(function() {
+                const row = $(this);
+                // Ambil harga, hapus titik ribuan jika ada
+                const priceText = row.find('.price').val() || '0';
+                const p = parseInt(priceText.replace(/\./g,'')) || 0;
+                const q = parseInt(row.find('.qty').val()) || 0;
+                
+                const sub = p * q;
+                row.find('.sub').val(sub.toLocaleString('id-ID'));
+                
+                total += sub;
+            });
+            $('#grandTotal').text('Rp ' + total.toLocaleString('id-ID'));
         }
 
         function updateRow(el) {
-            const row = el.closest('tr');
-            const opt = el.options[el.selectedIndex];
-            row.querySelector('.price').value = parseInt(opt.getAttribute('data-price')||0).toLocaleString('id-ID');
-            row.querySelector('.qty').setAttribute('max', opt.getAttribute('data-stok')||0);
+            // Karena pakai Select2, kita ambil data dari option yang dipilih (tetap di dalam elemen select asli)
+            const opt = $(el).find(':selected');
+            const row = $(el).closest('tr');
+            
+            const price = parseInt(opt.data('price') || 0);
+            const stok = parseInt(opt.data('stok') || 0);
+
+            row.find('.price').val(price.toLocaleString('id-ID'));
+            row.find('.qty').attr('max', stok);
+            
             calcTotal();
         }
 
-        function calcTotal() {
-            let total = 0;
-            document.querySelectorAll('#cartBody tr').forEach(r => {
-                const p = parseInt(r.querySelector('.price').value.replace(/\./g,'')||0);
-                const q = r.querySelector('.qty').value||0;
-                const sub = p*q;
-                r.querySelector('.sub').value = 'Rp '+sub.toLocaleString('id-ID');
-                total += sub;
+        function removeRow(btn) {
+            $(btn).closest('tr').remove();
+            calcTotal();
+        }
+
+        // --- 4. QUICK ADD CUSTOMER ---
+        $('#formAddCustomer').on('submit', function(e){
+            e.preventDefault();
+            const btn = $(this).find('button[type="submit"]');
+            btn.prop('disabled', true).text('Menyimpan...');
+
+            $.ajax({
+                url: '', 
+                type: 'POST',
+                data: {
+                    ajax_add_customer: true,
+                    nama: $('#new_nama').val(),
+                    telp: $('#new_telp').val(),
+                    alamat: $('#new_alamat').val()
+                },
+                success: function(res) {
+                    if(res.status === 'success') {
+                        var newOption = new Option(res.nama, res.id, true, true);
+                        $('#selectCustomer').append(newOption).trigger('change');
+                        $('#addCustomerModal').modal('hide');
+                        $('#formAddCustomer')[0].reset();
+                        alert('Customer berhasil ditambahkan!');
+                    } else {
+                        alert(res.message);
+                    }
+                },
+                error: function() { alert('Error sistem.'); },
+                complete: function() { btn.prop('disabled', false).text('Simpan & Pilih'); }
             });
-            document.getElementById('grandTotal').innerText = 'Rp '+total.toLocaleString('id-ID');
-        }
+        });
 
-        function toggleSidebar() {
-            document.body.classList.toggle('show-sidebar');
-        }
-
-        document.addEventListener('DOMContentLoaded', addRow);
+        function toggleSidebar() { document.body.classList.toggle('show-sidebar'); }
     </script>
 </body>
 </html>
