@@ -8,7 +8,6 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // --- QUERY DATA DASHBOARD ---
-// (Kode query PHP tidak berubah, saya singkat agar fokus ke tampilan)
 $bahan_alert = $conn->query("SELECT COUNT(*) as jumlah FROM bahan_baku WHERE stok <= stok_min")->fetch_assoc()['jumlah'];
 $produk_alert = $conn->query("SELECT COUNT(*) as jumlah FROM produk WHERE stok < 10")->fetch_assoc()['jumlah'];
 $total_penjualan = $conn->query("SELECT COALESCE(SUM(total), 0) as total FROM penjualan WHERE MONTH(tgl_penjualan) = MONTH(CURRENT_DATE) AND YEAR(tgl_penjualan) = YEAR(CURRENT_DATE)")->fetch_assoc()['total'];
@@ -27,6 +26,19 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/custom.css">
+    
+    <style>
+        /* ANIMASI HOVER UNTUK KARTU DASHBOARD */
+        .hover-card {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: default;
+        }
+        .hover-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(139, 69, 19, 0.15) !important;
+            border-color: var(--primary-color) !important;
+        }
+    </style>
 </head>
 <body>
 
@@ -37,7 +49,6 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
                 <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-                <small style="opacity: 0.7; font-size: 10px;">System v2.0</small>
             </div>
         </div>
         
@@ -45,6 +56,10 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
             <div class="nav-section-title">Main Menu</div>
             <a href="dashboard.php" class="nav-link active"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
             
+            <div class="nav-section-title">Master Data</div>
+            <a href="supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
+            <a href="customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
+
             <div class="nav-section-title">Inventory</div>
             <a href="bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
             <a href="produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
@@ -54,10 +69,8 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
             <a href="pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
             <a href="penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
             
-            <div class="nav-section-title">Master Data</div>
-            <a href="supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-             <a href="laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
+            <div class="nav-section-title">Reports</div>
+            <a href="laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
         </div>
     </div>
 
@@ -66,10 +79,6 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
                 <button class="btn-mobile-toggle" id="btnMobileToggle">
-                    <i class="bi bi-list"></i>
-                </button>
-
-                <button class="btn-desktop-toggle" id="btnDesktopToggle" title="Minimize Sidebar">
                     <i class="bi bi-list"></i>
                 </button>
 
@@ -106,7 +115,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
         <div class="content-area p-4">
             <div class="row g-3 mb-4">
                 <div class="col-6 col-xl-3">
-                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden">
+                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden hover-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div class="fw-bold text-secondary" style="font-size: 0.8rem;">BAHAN BAKU</div>
                             <span class="badge bg-warning text-dark rounded-pill">Restok</span>
@@ -120,7 +129,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                 </div>
 
                 <div class="col-6 col-xl-3">
-                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden">
+                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden hover-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div class="fw-bold text-secondary" style="font-size: 0.8rem;">PRODUK</div>
                             <span class="badge bg-danger rounded-pill">Kritis</span>
@@ -134,7 +143,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                 </div>
 
                 <div class="col-6 col-xl-3">
-                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden">
+                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden hover-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div class="fw-bold text-secondary" style="font-size: 0.8rem;">OMZET (BLN)</div>
                             <i class="bi bi-graph-up-arrow text-success"></i>
@@ -148,7 +157,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                 </div>
 
                 <div class="col-6 col-xl-3">
-                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden">
+                    <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden hover-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div class="fw-bold text-secondary" style="font-size: 0.8rem;">PENGELUARAN</div>
                             <i class="bi bi-cart text-primary"></i>
@@ -164,7 +173,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
 
             <div class="row g-4">
                 <div class="col-lg-6">
-                    <div class="bg-white p-4 rounded-4 shadow-sm h-100 border border-light">
+                    <div class="bg-white p-4 rounded-4 shadow-sm h-100 border border-light hover-card">
                         <h6 class="fw-bold mb-3">⚠️ Bahan Baku Menipis</h6>
                         <?php if ($result_detail_bahan->num_rows > 0): ?>
                             <?php while($row = $result_detail_bahan->fetch_assoc()): ?>
@@ -181,8 +190,9 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                         <?php endif; ?>
                     </div>
                 </div>
+                
                 <div class="col-lg-6">
-                     <div class="bg-white p-4 rounded-4 shadow-sm h-100 border border-light">
+                     <div class="bg-white p-4 rounded-4 shadow-sm h-100 border border-light hover-card">
                         <h6 class="fw-bold mb-3">📉 Produk Perlu Produksi</h6>
                         <?php if ($result_detail_produk->num_rows > 0): ?>
                             <?php while($row = $result_detail_produk->fetch_assoc()): ?>
@@ -205,14 +215,11 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // LOGIKA TOGGLE SIDEBAR (DESKTOP & MOBILE)
+        // LOGIKA TOGGLE SIDEBAR (MOBILE ONLY)
         const btnMobile = document.getElementById('btnMobileToggle');
-        const btnDesktop = document.getElementById('btnDesktopToggle');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
-        const body = document.body;
 
-        // 1. Fitur HP: Buka/Tutup Drawer
         if(btnMobile) {
             btnMobile.addEventListener('click', () => {
                 sidebar.classList.add('show');
@@ -223,13 +230,6 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
             overlay.addEventListener('click', () => {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
-            });
-        }
-
-        // 2. Fitur Laptop: Minimize Sidebar (Icon Only)
-        if(btnDesktop) {
-            btnDesktop.addEventListener('click', () => {
-                body.classList.toggle('sidebar-mini');
             });
         }
     </script>

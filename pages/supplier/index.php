@@ -108,14 +108,17 @@ $result = $conn->query($query);
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
                 <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-                <small style="opacity: 0.7; font-size: 10px;">System v2.0</small>
-            </div>
+                </div>
         </div>
         
         <div class="sidebar-nav mt-3">
             <div class="nav-section-title">Main Menu</div>
             <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
             
+            <div class="nav-section-title">Master Data</div>
+            <a href="index.php" class="nav-link active"><i class="bi bi-building"></i> <span>Supplier</span></a>
+            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
+
             <div class="nav-section-title">Inventory</div>
             <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
             <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
@@ -125,9 +128,7 @@ $result = $conn->query($query);
             <a href="../pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
             <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
             
-            <div class="nav-section-title">Master Data</div>
-            <a href="index.php" class="nav-link active"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
+            <div class="nav-section-title">Reports</div>
             <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
         </div>
     </div>
@@ -137,7 +138,7 @@ $result = $conn->query($query);
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
                 <button class="btn-mobile-toggle" id="btnMobileToggle"><i class="bi bi-list"></i></button>
-                <button class="btn-desktop-toggle" id="btnDesktopToggle"><i class="bi bi-list"></i></button>
+                
                 <div class="page-title">
                     <h5 class="fw-bold mb-0 text-dark">Supplier</h5>
                     <small class="text-muted d-none d-sm-block" style="font-size: 11px;">Rekanan Bisnis</small>
@@ -245,7 +246,7 @@ $result = $conn->query($query);
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
                     <h5 class="modal-title fw-bold">Tambah Supplier</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body p-4">
@@ -286,7 +287,7 @@ $result = $conn->query($query);
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
                     <h5 class="modal-title fw-bold">Edit Supplier</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body p-4">
@@ -327,12 +328,10 @@ $result = $conn->query($query);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Toggle Sidebar
+        // Toggle Sidebar (Mobile Only)
         const btnMobile = document.getElementById('btnMobileToggle');
-        const btnDesktop = document.getElementById('btnDesktopToggle');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
-        const body = document.body;
 
         if(btnMobile) {
             btnMobile.addEventListener('click', () => {
@@ -346,13 +345,8 @@ $result = $conn->query($query);
                 overlay.classList.remove('show');
             });
         }
-        if(btnDesktop) {
-            btnDesktop.addEventListener('click', () => {
-                body.classList.toggle('sidebar-mini');
-            });
-        }
         
-        // Script Edit Modal
+        // Script Populate Edit Modal
         const editModal = document.getElementById('editModal');
         editModal.addEventListener('show.bs.modal', event => {
             const button = event.relatedTarget;
