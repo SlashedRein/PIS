@@ -3,7 +3,7 @@ require_once '../config/database.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
+    header("Location: ../login.php"); // Perbaikan redirect jika belum login
     exit();
 }
 
@@ -105,7 +105,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../logout.php" class="dropdown-item-custom logout text-danger">
+                    <a href="logout.php" class="dropdown-item-custom logout text-danger">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
