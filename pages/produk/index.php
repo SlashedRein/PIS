@@ -97,15 +97,23 @@ $result = $conn->query($query);
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="../../assets/css/custom.css">
 
     <style>
+        /* Style Tambahan Khusus Halaman Ini */
         .badge-status { padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
         .badge-aman { background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
         .badge-warning { background: #FFF3E0; color: #EF6C00; border: 1px solid #FFE0B2; }
         .badge-danger { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
+        
+        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .modal-title { font-weight: 700; color: var(--primary-color); }
+        .text-brown { color: var(--primary-color) !important; }
+        .btn-brown { background-color: var(--primary-color); color: white; }
+        .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
@@ -117,7 +125,7 @@ $result = $conn->query($query);
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
                 <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-                </div>
+            </div>
         </div>
         
         <div class="sidebar-nav mt-3">
@@ -143,13 +151,11 @@ $result = $conn->query($query);
     </div>
 
     <div class="main-content">
-        
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
                 <button class="btn-mobile-toggle" id="btnMobileToggle"><i class="bi bi-list"></i></button>
-                
                 <div class="page-title">
-                    <h5 class="fw-bold mb-0 text-dark">Produk</h5>
+                    <h5 class="fw-bold mb-0 text-dark">Data Produk</h5>
                     <small class="text-muted d-none d-sm-block" style="font-size: 11px;">Katalog Kue & Cookies</small>
                 </div>
             </div>
@@ -165,7 +171,7 @@ $result = $conn->query($query);
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger" onclick="return confirm('Yakin ingin keluar?')">
+                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -174,22 +180,13 @@ $result = $conn->query($query);
 
         <div class="content-area p-4">
             
-            <?php if ($success): ?>
-                <div class="alert alert-success d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-check-circle-fill"></i> <div><?php echo $success; ?></div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($error): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-exclamation-triangle-fill"></i> <div><?php echo $error; ?></div>
-                </div>
-            <?php endif; ?>
+            <?php if ($success): ?><div class="alert alert-success d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i> <?php echo $success; ?></div><?php endif; ?>
+            <?php if ($error): ?><div class="alert alert-danger d-flex align-items-center gap-2"><i class="bi bi-exclamation-triangle-fill"></i> <?php echo $error; ?></div><?php endif; ?>
 
             <div class="bg-white rounded-4 shadow-sm border border-light p-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Daftar Produk</h5>
+                        <h5 class="fw-bold text-brown mb-1">Daftar Produk</h5>
                         <p class="text-muted small mb-0">Manajemen stok barang jadi</p>
                     </div>
                     <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -250,10 +247,7 @@ $result = $conn->query($query);
                                 </tr>
                             <?php endwhile; else: ?>
                                 <tr>
-                                    <td colspan="7" class="text-center py-5 text-muted">
-                                        <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
-                                        Belum ada data produk.
-                                    </td>
+                                    <td colspan="7" class="text-center py-5 text-muted">Belum ada data produk.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -273,13 +267,13 @@ $result = $conn->query($query);
                 <form method="POST" action="">
                     <div class="modal-body p-4">
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Produk</label>
+                            <label class="form-label small fw-bold">Nama Produk</label>
                             <input type="text" class="form-control rounded-3" name="nama_produk" placeholder="Contoh: Nastar Keju" required>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold small">Satuan</label>
+                                <label class="form-label small fw-bold">Satuan</label>
                                 <select class="form-select rounded-3" name="satuan" required>
                                     <option value="">-- Pilih --</option>
                                     <option value="toples">Toples</option>
@@ -289,21 +283,19 @@ $result = $conn->query($query);
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold small">Stok Awal</label>
+                                <label class="form-label small fw-bold">Stok Awal</label>
                                 <input type="number" class="form-control rounded-3" name="stok" value="0" min="0">
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Harga Jual (Rp)</label>
+                            <label class="form-label small fw-bold">Harga Jual (Rp)</label>
                             <input type="number" class="form-control rounded-3" name="harga_jual" placeholder="0" min="0" required>
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
                         <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="create_produk" class="btn btn-brown rounded-3 px-4">
-                            Simpan
-                        </button>
+                        <button type="submit" name="create_produk" class="btn btn-brown rounded-3 px-4">Simpan</button>
                     </div>
                 </form>
             </div>
@@ -322,13 +314,13 @@ $result = $conn->query($query);
                         <input type="hidden" name="id_produk" id="edit_id">
                         
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Produk</label>
+                            <label class="form-label small fw-bold">Nama Produk</label>
                             <input type="text" class="form-control rounded-3" name="nama_produk" id="edit_nama" required>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold small">Satuan</label>
+                                <label class="form-label small fw-bold">Satuan</label>
                                 <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
                                     <option value="toples">Toples</option>
                                     <option value="pcs">Pcs</option>
@@ -337,21 +329,19 @@ $result = $conn->query($query);
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold small">Stok</label>
+                                <label class="form-label small fw-bold">Stok</label>
                                 <input type="number" class="form-control rounded-3" name="stok" id="edit_stok" min="0">
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Harga Jual (Rp)</label>
+                            <label class="form-label small fw-bold">Harga Jual (Rp)</label>
                             <input type="number" class="form-control rounded-3" name="harga_jual" id="edit_harga" min="0" required>
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
                         <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">
-                            Update
-                        </button>
+                        <button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">Update</button>
                     </div>
                 </form>
             </div>
@@ -359,9 +349,10 @@ $result = $conn->query($query);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        // Script Toggle Sidebar
+        // Sidebar Mobile
         const btnMobile = document.getElementById('btnMobileToggle');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
@@ -379,16 +370,35 @@ $result = $conn->query($query);
             });
         }
 
-        // Script Populate Edit Modal
+        // Modal Edit
         const editModal = document.getElementById('editModal');
         editModal.addEventListener('show.bs.modal', event => {
             const button = event.relatedTarget;
-            
             document.getElementById('edit_id').value = button.getAttribute('data-id');
             document.getElementById('edit_nama').value = button.getAttribute('data-nama');
             document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
             document.getElementById('edit_harga').value = button.getAttribute('data-harga');
             document.getElementById('edit_stok').value = button.getAttribute('data-stok');
+        });
+
+        // SweetAlert Logout
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); 
+            Swal.fire({
+                title: 'Keluar?',
+                text: "Sesi Anda akan berakhir.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = '../logout.php'; 
+                }
+            });
         });
     </script>
 

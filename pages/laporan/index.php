@@ -7,8 +7,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// --- [LOGIC 1] AJAX HANDLER: AMBIL DETAIL NOTA ---
-// Bagian ini menangani request dari Javascript saat tombol "Mata" diklik
+// --- [LOGIC 1] AJAX HANDLER: DETAIL NOTA ---
 if (isset($_POST['get_detail_nota'])) {
     $id_penjualan = clean_input($_POST['id_penjualan']);
     
@@ -19,10 +18,9 @@ if (isset($_POST['get_detail_nota'])) {
               WHERE dp.id_penjualan = '$id_penjualan'";
     $result = $conn->query($query);
     
-    // Ambil Info Header (Total & Tanggal)
+    // Ambil Header (Total Belanja)
     $header = $conn->query("SELECT total FROM penjualan WHERE id_penjualan = '$id_penjualan'")->fetch_assoc();
 
-    // Generate HTML Baris Tabel untuk dimasukkan ke Modal
     $html = '';
     if ($result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
@@ -43,19 +41,17 @@ if (isset($_POST['get_detail_nota'])) {
     }
     
     echo $html;
-    exit(); // Stop script disini agar tidak me-load halaman web utuh
+    exit(); 
 }
 
-// --- FILTER TANGGAL (Default: Bulan Ini) ---
+// --- FILTER TANGGAL ---
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
 $end_date   = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
 
 // --- LOGIKA QUERY PEMISAH ---
-// Kita asumsikan Pelanggan Tetap punya nama mengandung "PT", "CV", atau "UD"
 $keyword_tetap = " (c.nama LIKE '%PT%' OR c.nama LIKE '%CV%' OR c.nama LIKE '%UD%') ";
 
-// 1. QUERY PELANGGAN BIASA (Harian)
-// Logic: Ambil semua KECUALI yang namanya ada PT/CV/UD
+// 1. Pelanggan Biasa (Harian)
 $query_biasa = "SELECT p.*, c.nama 
                 FROM penjualan p 
                 JOIN customer c ON p.id_cust = c.id_cust
@@ -64,8 +60,7 @@ $query_biasa = "SELECT p.*, c.nama
                 ORDER BY p.tgl_penjualan DESC";
 $res_biasa = $conn->query($query_biasa);
 
-// 2. QUERY PELANGGAN TETAP (Rekap Mingguan/Invoice)
-// Logic: Hanya ambil yang PT/CV/UD, lalu GROUP BY Minggu & Customer
+// 2. Pelanggan Tetap (Rekap Mingguan)
 $query_tetap = "SELECT 
                     c.nama,
                     YEAR(p.tgl_penjualan) as tahun,
@@ -82,7 +77,6 @@ $query_tetap = "SELECT
                 ORDER BY tgl_akhir_minggu DESC"; 
 $res_tetap = $conn->query($query_tetap);
 
-// Hitung Total Keseluruhan untuk Summary
 $grand_total_biasa = 0;
 $grand_total_tetap = 0;
 ?>
@@ -96,44 +90,30 @@ $grand_total_tetap = 0;
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="../../assets/css/custom.css">
     
     <style>
-        /* Custom Tabs Style */
-        .nav-tabs .nav-link { color: var(--primary-color); border: none; font-weight: 500; }
+        .nav-tabs .nav-link { color: #8B4513; border: none; font-weight: 500; padding: 10px 20px; }
         .nav-tabs .nav-link.active { 
             background-color: #FFF8E1; 
-            color: var(--primary-color); 
-            border-bottom: 3px solid var(--primary-color);
+            color: #8B4513; 
+            border-bottom: 3px solid #8B4513;
             font-weight: 700;
         }
-        .nav-tabs { border-bottom: 2px solid #eee; margin-bottom: 20px; }
-        
-        /* Sidebar Toggle */
-        .sidebar { width: 260px; position: fixed; top: 0; left: 0; bottom: 0; transition: transform 0.3s ease-in-out; z-index: 1050; }
-        .main-content { margin-left: 260px; transition: margin-left 0.3s ease-in-out; }
-        .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1040; cursor: pointer; }
-        #mobile-toggle { display: none; }
-
-        @media (max-width: 992px) {
-            .sidebar { transform: translateX(-100%); }
-            .main-content { margin-left: 0; }
-            #mobile-toggle { display: block; font-size: 1.5rem; cursor: pointer; margin-right: 15px; color: var(--primary-color); }
-            body.show-sidebar .sidebar { transform: translateX(0); }
-            body.show-sidebar .overlay { display: block; }
-        }
-        
-        .text-brown { color: var(--primary-color) !important; }
-        .btn-brown { background-color: var(--primary-color); color: white; border: none; }
+        .btn-brown { background-color: #8B4513; color: white; border: none; }
         .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
 
-    <div class="overlay" onclick="toggleSidebar()"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
@@ -164,11 +144,15 @@ $grand_total_tetap = 0;
     </div>
 
     <div class="main-content">
+        
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
-                <button class="btn-mobile-toggle" id="mobile-toggle" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
-                <div class="page-title"><h4 class="m-0">Laporan Keuangan</h4></div>
+                <button class="btn-mobile-toggle" id="btnMobileToggle"><i class="bi bi-list"></i></button>
+                <div class="page-title">
+                    <h5 class="fw-bold mb-0 text-dark">Laporan Keuangan</h5>
+                </div>
             </div>
+            
             <div class="user-dropdown-container">
                 <div class="user-profile">
                     <div class="user-info d-none d-md-block text-end">
@@ -180,7 +164,7 @@ $grand_total_tetap = 0;
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger"><i class="bi bi-power"></i> Logout</a>
+                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout"><i class="bi bi-power"></i> Logout</a>
                 </div>
             </div>
         </div>
@@ -190,16 +174,26 @@ $grand_total_tetap = 0;
             <div class="bg-white rounded-4 shadow-sm border border-light p-4 mb-4">
                 <form method="GET" action="">
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted">Pencarian</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" name="q" class="form-control" placeholder="No Nota / Nama..." value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted">Dari Tanggal</label>
                             <input type="date" name="start_date" class="form-control" value="<?php echo $start_date; ?>">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted">Sampai Tanggal</label>
                             <input type="date" name="end_date" class="form-control" value="<?php echo $end_date; ?>">
                         </div>
-                        <div class="col-md-4">
-                            <button type="submit" class="btn btn-brown w-100"><i class="bi bi-filter"></i> Tampilkan Laporan</button>
+                        <div class="col-md-3 d-flex justify-content-end gap-2">
+                            <button type="submit" class="btn btn-brown px-4 fw-bold shadow-sm">Filter Data</button>
+                            <?php if(isset($_GET['q']) || isset($_GET['start_date'])): ?>
+                                <a href="index.php" class="btn btn-outline-secondary" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </form>
@@ -207,12 +201,12 @@ $grand_total_tetap = 0;
 
             <ul class="nav nav-tabs" id="laporanTab" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="biasa-tab" data-bs-toggle="tab" data-bs-target="#biasa" type="button" role="tab">
+                    <button class="nav-link active" id="biasa-tab" data-bs-toggle="tab" data-bs-target="#biasa" type="button">
                         <i class="bi bi-people"></i> Pelanggan Umum (Harian)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tetap-tab" data-bs-toggle="tab" data-bs-target="#tetap" type="button" role="tab">
+                    <button class="nav-link" id="tetap-tab" data-bs-toggle="tab" data-bs-target="#tetap" type="button">
                         <i class="bi bi-building"></i> Pelanggan Tetap / PT (Mingguan)
                     </button>
                 </li>
@@ -222,7 +216,10 @@ $grand_total_tetap = 0;
                 
                 <div class="tab-pane fade show active" id="biasa" role="tabpanel">
                     <div class="bg-white rounded-4 shadow-sm border border-light p-4">
-                        <h6 class="fw-bold mb-3 text-dark">Detail Transaksi Harian (Umum)</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold text-dark m-0">Detail Transaksi Harian</h6>
+                        </div>
+                        
                         <div class="table-responsive">
                             <table class="table table-hover align-middle">
                                 <thead class="bg-light">
@@ -245,21 +242,24 @@ $grand_total_tetap = 0;
                                             <td><?php echo $row['nama']; ?></td>
                                             <td class="text-end fw-bold"><?php echo format_rupiah($row['total']); ?></td>
                                             <td class="text-center">
-                                                <button class="btn btn-sm btn-info text-white rounded-2" 
-                                                        onclick="showDetail(<?php echo $row['id_penjualan']; ?>, '<?php echo $row['nama']; ?>')">
+                                                <button class="btn btn-sm btn-info text-white shadow-sm" 
+                                                        onclick="showDetail(<?php echo $row['id_penjualan']; ?>, '<?php echo $row['nama']; ?>')" title="Lihat Detail Barang">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
+                                                <a href="../penjualan/nota.php?id=<?php echo $row['id_penjualan']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="Cetak Nota"><i class="bi bi-printer"></i></a>
+                                                
+                                                <button onclick="confirmDelete('../penjualan/index.php?delete=<?php echo $row['id_penjualan']; ?>')" class="btn btn-sm btn-outline-danger ms-1" title="Hapus"><i class="bi bi-trash"></i></button>
                                             </td>
                                         </tr>
                                         <?php endwhile; ?>
                                     <?php else: ?>
-                                        <tr><td colspan="5" class="text-center py-4 text-muted">Tidak ada transaksi pelanggan umum.</td></tr>
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">Tidak ada transaksi.</td></tr>
                                     <?php endif; ?>
                                 </tbody>
                                 <tfoot class="bg-light">
                                     <tr>
-                                        <td colspan="3" class="text-end fw-bold py-3">TOTAL PENDAPATAN (UMUM) :</td>
-                                        <td colspan="2" class="text-end fw-bold py-3 text-success fs-5 px-3"><?php echo format_rupiah($grand_total_biasa); ?></td>
+                                        <td colspan="3" class="text-end fw-bold py-3">TOTAL PENDAPATAN :</td>
+                                        <td colspan="2" class="text-start fw-bold py-3 text-success fs-5 px-3"><?php echo format_rupiah($grand_total_biasa); ?></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -269,19 +269,18 @@ $grand_total_tetap = 0;
 
                 <div class="tab-pane fade" id="tetap" role="tabpanel">
                     <div class="bg-white rounded-4 shadow-sm border border-light p-4">
-                        <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
+                        <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
                             <i class="bi bi-info-circle-fill"></i>
-                            <small>Data ini menampilkan rekap tagihan mingguan untuk Customer dengan nama mengandung <b>"PT", "CV", atau "UD"</b>.</small>
+                            <small>Rekapitulasi mingguan untuk Customer <b>PT / CV / UD</b>.</small>
                         </div>
 
-                        <h6 class="fw-bold mb-3 text-dark">Rekap Tagihan Mingguan (Invoice)</h6>
                         <div class="table-responsive">
                             <table class="table table-hover align-middle">
                                 <thead class="bg-light">
                                     <tr>
                                         <th>Customer (PT/CV)</th>
                                         <th>Periode Minggu</th>
-                                        <th class="text-center">Jml Transaksi</th>
+                                        <th class="text-center">Jml Order</th>
                                         <th class="text-end">Total Tagihan</th>
                                         <th class="text-center">Aksi</th>
                                     </tr>
@@ -295,26 +294,24 @@ $grand_total_tetap = 0;
                                         <tr>
                                             <td class="fw-bold text-primary"><?php echo $row['nama']; ?></td>
                                             <td>
-                                                <span class="badge bg-light text-dark border">
-                                                    Minggu ke-<?php echo $row['minggu_ke']; ?>
-                                                </span>
+                                                <span class="badge bg-light text-dark border">Minggu ke-<?php echo $row['minggu_ke']; ?></span>
                                                 <br><small class="text-muted"><?php echo $periode; ?></small>
                                             </td>
-                                            <td class="text-center"><?php echo $row['jumlah_transaksi']; ?>x Order</td>
+                                            <td class="text-center"><?php echo $row['jumlah_transaksi']; ?>x</td>
                                             <td class="text-end fw-bold text-danger"><?php echo format_rupiah($row['total_tagihan']); ?></td>
                                             <td class="text-center">
-                                                <button class="btn btn-sm btn-outline-secondary" title="Cetak Invoice Mingguan"><i class="bi bi-printer"></i></button>
+                                                <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Invoice</button>
                                             </td>
                                         </tr>
                                         <?php endwhile; ?>
                                     <?php else: ?>
-                                        <tr><td colspan="5" class="text-center py-4 text-muted">Tidak ada transaksi pelanggan tetap (PT/CV).</td></tr>
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">Tidak ada data pelanggan tetap.</td></tr>
                                     <?php endif; ?>
                                 </tbody>
                                 <tfoot class="bg-light">
                                     <tr>
-                                        <td colspan="3" class="text-end fw-bold py-3">TOTAL TAGIHAN (PT/CV) :</td>
-                                        <td colspan="2" class="text-end fw-bold py-3 text-danger fs-5 px-3"><?php echo format_rupiah($grand_total_tetap); ?></td>
+                                        <td colspan="3" class="text-end fw-bold py-3">TOTAL TAGIHAN :</td>
+                                        <td colspan="2" class="text-start fw-bold py-3 text-danger fs-5 px-3"><?php echo format_rupiah($grand_total_tetap); ?></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -330,7 +327,7 @@ $grand_total_tetap = 0;
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0">
-                    <h5 class="modal-title fw-bold">Detail Penjualan</h5>
+                    <h5 class="modal-title fw-bold">Detail Barang</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0">
@@ -346,8 +343,7 @@ $grand_total_tetap = 0;
                                 </tr>
                             </thead>
                             <tbody id="detailContent">
-                                <tr><td colspan="4" class="text-center py-3">Memuat data...</td></tr>
-                            </tbody>
+                                </tbody>
                         </table>
                     </div>
                 </div>
@@ -360,32 +356,83 @@ $grand_total_tetap = 0;
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        function toggleSidebar() { document.body.classList.toggle('show-sidebar'); }
+        // Logic Sidebar Mobile
+        const btnMobile = document.getElementById('btnMobileToggle');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
 
-        // FUNGSI AJAX TAMPILKAN DETAIL
+        if(btnMobile) {
+            btnMobile.addEventListener('click', () => {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+            });
+        }
+        if(overlay) {
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('show');
+                overlay.classList.remove('show');
+            });
+        }
+
+        // Logic Pop-up Detail via AJAX
         function showDetail(idPenjualan, customerName) {
-            // 1. Set Nama Customer di Modal
             $('#detailCustomerName').text(customerName);
+            $('#detailContent').html('<tr><td colspan="4" class="text-center py-3 text-muted">Memuat data...</td></tr>');
             
-            // 2. Reset isi tabel ke loading
-            $('#detailContent').html('<tr><td colspan="4" class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm text-primary"></div> Memuat data...</td></tr>');
-            
-            // 3. Buka Modal
             var myModal = new bootstrap.Modal(document.getElementById('detailModal'));
             myModal.show();
 
-            // 4. Panggil Data via AJAX
             $.ajax({
-                url: '', // Post ke halaman ini sendiri
+                url: '', 
                 type: 'POST',
                 data: { get_detail_nota: true, id_penjualan: idPenjualan },
                 success: function(response) {
                     $('#detailContent').html(response);
                 },
                 error: function() {
-                    $('#detailContent').html('<tr><td colspan="4" class="text-center text-danger">Gagal mengambil data.</td></tr>');
+                    $('#detailContent').html('<tr><td colspan="4" class="text-center text-danger">Gagal memuat data.</td></tr>');
+                }
+            });
+        }
+
+        // --- SWEETALERT LOGOUT (SERAGAM DENGAN CUSTOMER/SUPPLIER) ---
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); 
+            Swal.fire({
+                title: 'Keluar?',
+                text: "Anda harus login kembali nanti.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = '../logout.php'; // Naik 1 level (karena file ini di pages/laporan/)
+                }
+            });
+        });
+
+        // --- SWEETALERT DELETE (SERAGAM) ---
+        function confirmDelete(url) {
+            Swal.fire({
+                title: 'Hapus Transaksi?',
+                text: "Data akan hilang permanen & stok barang akan dikembalikan!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Hapus!',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = url;
                 }
             });
         }

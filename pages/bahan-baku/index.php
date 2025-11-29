@@ -14,7 +14,7 @@ $error = '';
 if (isset($_GET['delete'])) {
     $id = clean_input($_GET['delete']);
     
-    // Cek apakah bahan baku dipakai di resep (Foreign Key Check)
+    // Cek relasi
     $check_query = "SELECT COUNT(*) as count FROM resep WHERE id_bahan = ?";
     $stmt = $conn->prepare($check_query);
     $stmt->bind_param("i", $id);
@@ -22,7 +22,7 @@ if (isset($_GET['delete'])) {
     $check = $stmt->get_result()->fetch_assoc();
     
     if ($check['count'] > 0) {
-        $error = "Gagal: Bahan baku tidak bisa dihapus karena sedang digunakan dalam Resep Produk!";
+        $error = "Gagal: Bahan baku tidak bisa dihapus karena digunakan dalam Resep!";
     } else {
         $delete_query = "DELETE FROM bahan_baku WHERE id_bahan = ?";
         $stmt = $conn->prepare($delete_query);
@@ -37,7 +37,7 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// --- 2. LOGIKA CREATE (TAMBAH DATA) ---
+// --- 2. LOGIKA CREATE ---
 if (isset($_POST['create_bahan'])) {
     $nama_bahan = clean_input($_POST['nama_bahan']);
     $satuan     = clean_input($_POST['satuan']);
@@ -47,20 +47,19 @@ if (isset($_POST['create_bahan'])) {
     if (empty($nama_bahan)) {
         $error = "Nama bahan wajib diisi!";
     } else {
-        $insert_query = "INSERT INTO bahan_baku (nama_bahan, satuan, stok, stok_min) VALUES (?, ?, ?, ?)";
-        $stmt = $conn->prepare($insert_query);
+        $stmt = $conn->prepare("INSERT INTO bahan_baku (nama_bahan, satuan, stok, stok_min) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("ssii", $nama_bahan, $satuan, $stok, $stok_min);
         
         if ($stmt->execute()) {
             $success = "Bahan baku berhasil ditambahkan!";
             header("refresh:1;url=index.php");
         } else {
-            $error = "Gagal menambah data: " . $conn->error;
+            $error = "Gagal: " . $conn->error;
         }
     }
 }
 
-// --- 3. LOGIKA UPDATE (EDIT DATA) ---
+// --- 3. LOGIKA UPDATE ---
 if (isset($_POST['update_bahan'])) {
     $id_bahan   = clean_input($_POST['id_bahan']);
     $nama_bahan = clean_input($_POST['nama_bahan']);
@@ -71,20 +70,19 @@ if (isset($_POST['update_bahan'])) {
     if (empty($nama_bahan)) {
         $error = "Nama bahan wajib diisi!";
     } else {
-        $update_query = "UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?";
-        $stmt = $conn->prepare($update_query);
+        $stmt = $conn->prepare("UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?");
         $stmt->bind_param("ssiii", $nama_bahan, $satuan, $stok, $stok_min, $id_bahan);
         
         if ($stmt->execute()) {
             $success = "Data bahan baku berhasil diperbarui!";
             header("refresh:1;url=index.php");
         } else {
-            $error = "Gagal update data: " . $conn->error;
+            $error = "Gagal update: " . $conn->error;
         }
     }
 }
 
-// Ambil Data Bahan Baku
+// Ambil Data
 $query = "SELECT * FROM bahan_baku ORDER BY nama_bahan ASC";
 $result = $conn->query($query);
 ?>
@@ -98,8 +96,10 @@ $result = $conn->query($query);
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
 
     <style>
@@ -107,6 +107,13 @@ $result = $conn->query($query);
         .badge-aman { background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
         .badge-warning { background: #FFF3E0; color: #EF6C00; border: 1px solid #FFE0B2; }
         .badge-danger { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
+        
+        /* Modal & Button Style */
+        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .modal-title { font-weight: 700; color: var(--primary-color); }
+        .text-brown { color: var(--primary-color) !important; }
+        .btn-brown { background-color: var(--primary-color); color: white; }
+        .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
@@ -118,7 +125,7 @@ $result = $conn->query($query);
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
                 <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-                </div>
+            </div>
         </div>
         
         <div class="sidebar-nav mt-3">
@@ -144,11 +151,9 @@ $result = $conn->query($query);
     </div>
 
     <div class="main-content">
-        
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
                 <button class="btn-mobile-toggle" id="btnMobileToggle"><i class="bi bi-list"></i></button>
-                
                 <div class="page-title">
                     <h5 class="fw-bold mb-0 text-dark">Bahan Baku</h5>
                     <small class="text-muted d-none d-sm-block" style="font-size: 11px;">Manage stok bahan</small>
@@ -166,7 +171,7 @@ $result = $conn->query($query);
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger" onclick="return confirm('Yakin ingin keluar?')">
+                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -175,22 +180,13 @@ $result = $conn->query($query);
 
         <div class="content-area p-4">
             
-            <?php if ($success): ?>
-                <div class="alert alert-success d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-check-circle-fill"></i> <div><?php echo $success; ?></div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($error): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-exclamation-triangle-fill"></i> <div><?php echo $error; ?></div>
-                </div>
-            <?php endif; ?>
+            <?php if ($success): ?><div class="alert alert-success d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i> <?php echo $success; ?></div><?php endif; ?>
+            <?php if ($error): ?><div class="alert alert-danger d-flex align-items-center gap-2"><i class="bi bi-exclamation-triangle-fill"></i> <?php echo $error; ?></div><?php endif; ?>
 
             <div class="bg-white rounded-4 shadow-sm border border-light p-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Daftar Stok Bahan</h5>
+                        <h5 class="fw-bold text-brown mb-1">Daftar Stok Bahan</h5>
                         <p class="text-muted small mb-0">Pantau ketersediaan bahan baku produksi</p>
                     </div>
                     <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -249,12 +245,7 @@ $result = $conn->query($query);
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
-                                <tr>
-                                    <td colspan="7" class="text-center py-5 text-muted">
-                                        <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
-                                        Belum ada data bahan baku
-                                    </td>
-                                </tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted">Belum ada data bahan baku.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -273,11 +264,11 @@ $result = $conn->query($query);
                 <form method="POST">
                     <div class="modal-body p-4">
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Bahan</label>
+                            <label class="form-label small fw-bold">Nama Bahan</label>
                             <input type="text" class="form-control rounded-3" name="nama_bahan" required placeholder="Contoh: Tepung Terigu">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Satuan</label>
+                            <label class="form-label small fw-bold">Satuan</label>
                             <select class="form-select rounded-3" name="satuan" required>
                                 <option value="">-- Pilih --</option>
                                 <option value="kg">Kilogram (kg)</option>
@@ -291,11 +282,11 @@ $result = $conn->query($query);
                         </div>
                         <div class="row g-3">
                             <div class="col-6">
-                                <label class="form-label fw-bold small">Stok Awal</label>
+                                <label class="form-label small fw-bold">Stok Awal</label>
                                 <input type="number" class="form-control rounded-3" name="stok" value="0">
                             </div>
                             <div class="col-6">
-                                <label class="form-label fw-bold small text-danger">Min. Stok (Alert)</label>
+                                <label class="form-label small fw-bold text-danger">Min. Stok (Alert)</label>
                                 <input type="number" class="form-control rounded-3" name="stok_min" value="5">
                             </div>
                         </div>
@@ -320,11 +311,11 @@ $result = $conn->query($query);
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_bahan" id="edit_id">
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Bahan</label>
+                            <label class="form-label small fw-bold">Nama Bahan</label>
                             <input type="text" class="form-control rounded-3" name="nama_bahan" id="edit_nama" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Satuan</label>
+                            <label class="form-label small fw-bold">Satuan</label>
                             <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
                                 <option value="kg">Kilogram (kg)</option>
                                 <option value="gram">Gram (g)</option>
@@ -337,11 +328,11 @@ $result = $conn->query($query);
                         </div>
                         <div class="row g-3">
                             <div class="col-6">
-                                <label class="form-label fw-bold small">Stok Saat Ini</label>
+                                <label class="form-label small fw-bold">Stok Saat Ini</label>
                                 <input type="number" class="form-control rounded-3" name="stok" id="edit_stok">
                             </div>
                             <div class="col-6">
-                                <label class="form-label fw-bold small text-danger">Min. Stok</label>
+                                <label class="form-label small fw-bold text-danger">Min. Stok</label>
                                 <input type="number" class="form-control rounded-3" name="stok_min" id="edit_min">
                             </div>
                         </div>
@@ -356,6 +347,8 @@ $result = $conn->query($query);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
     <script>
         // Toggle Sidebar
         const btnMobile = document.getElementById('btnMobileToggle');
@@ -375,7 +368,7 @@ $result = $conn->query($query);
             });
         }
 
-        // Modal Edit Populate
+        // Modal Edit
         const editModal = document.getElementById('editModal');
         editModal.addEventListener('show.bs.modal', event => {
             const button = event.relatedTarget;
@@ -384,6 +377,27 @@ $result = $conn->query($query);
             document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
             document.getElementById('edit_stok').value = button.getAttribute('data-stok');
             document.getElementById('edit_min').value = button.getAttribute('data-min');
+        });
+
+        // SWEETALERT LOGOUT (PATH: ../logout.php)
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); 
+            
+            Swal.fire({
+                title: 'Keluar?',
+                text: "Anda harus login kembali nanti.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = '../logout.php'; 
+                }
+            });
         });
     </script>
 </body>

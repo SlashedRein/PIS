@@ -15,7 +15,7 @@ $error = '';
 if (isset($_GET['delete'])) {
     $id = clean_input($_GET['delete']);
     
-    // Cek apakah customer dipakai di penjualan (Foreign Key Check)
+    // Cek relasi data
     $check_query = "SELECT COUNT(*) as count FROM penjualan WHERE id_cust = ?";
     $stmt = $conn->prepare($check_query);
     $stmt->bind_param("i", $id);
@@ -23,7 +23,7 @@ if (isset($_GET['delete'])) {
     $check = $stmt->get_result()->fetch_assoc();
     
     if ($check['count'] > 0) {
-        $error = "Gagal: Customer tidak bisa dihapus karena memiliki riwayat transaksi penjualan!";
+        $error = "Gagal: Customer tidak bisa dihapus karena memiliki riwayat transaksi!";
     } else {
         $delete_query = "DELETE FROM customer WHERE id_cust = ?";
         $stmt = $conn->prepare($delete_query);
@@ -38,7 +38,7 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// --- 2. LOGIKA CREATE (TAMBAH DATA VIA POP-UP) ---
+// --- 2. LOGIKA CREATE ---
 if (isset($_POST['create_customer'])) {
     $nama    = clean_input($_POST['nama']);
     $alamat  = clean_input($_POST['alamat']);
@@ -47,20 +47,19 @@ if (isset($_POST['create_customer'])) {
     if (empty($nama)) {
         $error = "Nama customer wajib diisi!";
     } else {
-        $insert_query = "INSERT INTO customer (nama, alamat, no_telp) VALUES (?, ?, ?)";
-        $stmt = $conn->prepare($insert_query);
+        $stmt = $conn->prepare("INSERT INTO customer (nama, alamat, no_telp) VALUES (?, ?, ?)");
         $stmt->bind_param("sss", $nama, $alamat, $no_telp);
         
         if ($stmt->execute()) {
             $success = "Customer berhasil ditambahkan!";
             header("refresh:1;url=index.php");
         } else {
-            $error = "Gagal menambah data: " . $conn->error;
+            $error = "Gagal: " . $conn->error;
         }
     }
 }
 
-// --- 3. LOGIKA UPDATE (EDIT DATA VIA POP-UP) ---
+// --- 3. LOGIKA UPDATE ---
 if (isset($_POST['update_customer'])) {
     $id_cust = clean_input($_POST['id_cust']);
     $nama    = clean_input($_POST['nama']);
@@ -70,20 +69,19 @@ if (isset($_POST['update_customer'])) {
     if (empty($nama)) {
         $error = "Nama customer wajib diisi!";
     } else {
-        $update_query = "UPDATE customer SET nama=?, alamat=?, no_telp=? WHERE id_cust=?";
-        $stmt = $conn->prepare($update_query);
+        $stmt = $conn->prepare("UPDATE customer SET nama=?, alamat=?, no_telp=? WHERE id_cust=?");
         $stmt->bind_param("sssi", $nama, $alamat, $no_telp, $id_cust);
         
         if ($stmt->execute()) {
             $success = "Data customer berhasil diperbarui!";
             header("refresh:1;url=index.php");
         } else {
-            $error = "Gagal update data: " . $conn->error;
+            $error = "Gagal update: " . $conn->error;
         }
     }
 }
 
-// Ambil Data Customer
+// Ambil Data
 $query = "SELECT * FROM customer ORDER BY nama ASC";
 $result = $conn->query($query);
 ?>
@@ -97,18 +95,18 @@ $result = $conn->query($query);
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
 
     <style>
-        .modal-header {
-            background: #fff;
-            color: var(--dark-color);
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-        }
+        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
         .modal-title { font-weight: 700; color: var(--primary-color); }
-        .form-label { font-weight: 600; color: var(--primary-color); }
+        .text-brown { color: var(--primary-color) !important; }
+        .btn-brown { background-color: var(--primary-color); color: white; }
+        .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
@@ -120,7 +118,7 @@ $result = $conn->query($query);
             <div class="logo-icon">🍪</div>
             <div class="logo-text text-start">
                 <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-                </div>
+            </div>
         </div>
         
         <div class="sidebar-nav mt-3">
@@ -146,11 +144,9 @@ $result = $conn->query($query);
     </div>
 
     <div class="main-content">
-        
         <div class="topbar shadow-sm">
             <div class="d-flex align-items-center gap-3">
                 <button class="btn-mobile-toggle" id="btnMobileToggle"><i class="bi bi-list"></i></button>
-                
                 <div class="page-title">
                     <h5 class="fw-bold mb-0 text-dark">Data Customer</h5>
                     <small class="text-muted d-none d-sm-block" style="font-size: 11px;">Kelola pelanggan setia</small>
@@ -169,7 +165,7 @@ $result = $conn->query($query);
                 </div>
                 
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger" onclick="return confirm('Yakin ingin keluar?')">
+                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -178,22 +174,13 @@ $result = $conn->query($query);
 
         <div class="content-area p-4">
             
-            <?php if ($success): ?>
-                <div class="alert alert-success d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-check-circle-fill"></i> <div><?php echo $success; ?></div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($error): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2 rounded-3 shadow-sm border-0 mb-4">
-                    <i class="bi bi-exclamation-triangle-fill"></i> <div><?php echo $error; ?></div>
-                </div>
-            <?php endif; ?>
+            <?php if ($success): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
+            <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
             <div class="bg-white rounded-4 shadow-sm border border-light p-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Daftar Pelanggan</h5>
+                        <h5 class="fw-bold text-brown mb-1">Daftar Pelanggan</h5>
                         <p class="text-muted small mb-0">Database kontak customer</p>
                     </div>
                     <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -224,7 +211,7 @@ $result = $conn->query($query);
                                     <td class="px-3 text-muted small"><?php echo htmlspecialchars($row['alamat'] ?? '-'); ?></td>
                                     <td class="px-3"><?php echo htmlspecialchars($row['no_telp'] ?? '-'); ?></td>
                                     <td class="px-3 text-end">
-                                        <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
+                                        <button class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#editModal"
                                                 data-id="<?php echo $row['id_cust']; ?>"
@@ -234,18 +221,13 @@ $result = $conn->query($query);
                                             <i class="bi bi-pencil"></i>
                                         </button>
 
-                                        <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Yakin ingin menghapus customer ini?')">
+                                        <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Hapus data ini?')">
                                             <i class="bi bi-trash"></i>
                                         </a>
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
-                                <tr>
-                                    <td colspan="5" class="text-center py-5 text-muted">
-                                        <i class="bi bi-people fs-1 d-block mb-2"></i>
-                                        Belum ada data customer.
-                                    </td>
-                                </tr>
+                                <tr><td colspan="5" class="text-center py-5 text-muted">Belum ada data customer.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -259,30 +241,26 @@ $result = $conn->query($query);
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
                     <h5 class="modal-title fw-bold">Tambah Customer</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" action="">
+                <form method="POST">
                     <div class="modal-body p-4">
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Customer *</label>
-                            <input type="text" class="form-control rounded-3" name="nama" placeholder="Contoh: Ibu Sarah" required>
+                            <label class="form-label small">Nama Customer *</label>
+                            <input type="text" class="form-control rounded-3" name="nama" required>
                         </div>
-                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Alamat</label>
-                            <textarea class="form-control rounded-3" name="alamat" rows="2" placeholder="Alamat lengkap"></textarea>
+                            <label class="form-label small">Alamat</label>
+                            <textarea class="form-control rounded-3" name="alamat" rows="2"></textarea>
                         </div>
-                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">No Telepon</label>
-                            <input type="text" class="form-control rounded-3" name="no_telp" placeholder="0812xxxx">
+                            <label class="form-label small">No Telepon</label>
+                            <input type="text" class="form-control rounded-3" name="no_telp">
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
                         <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="create_customer" class="btn btn-brown rounded-3 px-4">
-                            Simpan
-                        </button>
+                        <button type="submit" name="create_customer" class="btn btn-brown rounded-3 px-4">Simpan</button>
                     </div>
                 </form>
             </div>
@@ -294,32 +272,27 @@ $result = $conn->query($query);
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
                     <h5 class="modal-title fw-bold">Edit Customer</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" action="">
+                <form method="POST">
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_cust" id="edit_id">
-                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Nama Customer *</label>
+                            <label class="form-label small">Nama Customer *</label>
                             <input type="text" class="form-control rounded-3" name="nama" id="edit_nama" required>
                         </div>
-                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">Alamat</label>
+                            <label class="form-label small">Alamat</label>
                             <textarea class="form-control rounded-3" name="alamat" id="edit_alamat" rows="2"></textarea>
                         </div>
-                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small">No Telepon</label>
+                            <label class="form-label small">No Telepon</label>
                             <input type="text" class="form-control rounded-3" name="no_telp" id="edit_telp">
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
                         <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="update_customer" class="btn btn-brown rounded-3 px-4">
-                            Update Data
-                        </button>
+                        <button type="submit" name="update_customer" class="btn btn-brown rounded-3 px-4">Update</button>
                     </div>
                 </form>
             </div>
@@ -327,9 +300,10 @@ $result = $conn->query($query);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        // Toggle Sidebar
+        // Sidebar Toggle Mobile
         const btnMobile = document.getElementById('btnMobileToggle');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
@@ -347,22 +321,35 @@ $result = $conn->query($query);
             });
         }
 
-        // Script untuk mengisi form modal edit
+        // Logic Modal Edit
         const editModal = document.getElementById('editModal');
         editModal.addEventListener('show.bs.modal', event => {
-            const button = event.relatedTarget;
+            const btn = event.relatedTarget;
+            document.getElementById('edit_id').value = btn.getAttribute('data-id');
+            document.getElementById('edit_nama').value = btn.getAttribute('data-nama');
+            document.getElementById('edit_alamat').value = btn.getAttribute('data-alamat');
+            document.getElementById('edit_telp').value = btn.getAttribute('data-telp');
+        });
+
+        // SWEETALERT LOGOUT
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); // Cegah link langsung jalan
             
-            // Ambil data dari tombol
-            const id = button.getAttribute('data-id');
-            const nama = button.getAttribute('data-nama');
-            const alamat = button.getAttribute('data-alamat');
-            const telp = button.getAttribute('data-telp');
-            
-            // Isi form di dalam modal
-            document.getElementById('edit_id').value = id;
-            document.getElementById('edit_nama').value = nama;
-            document.getElementById('edit_alamat').value = alamat;
-            document.getElementById('edit_telp').value = telp;
+            Swal.fire({
+                title: 'Yakin ingin keluar?',
+                text: "Sesi Anda akan berakhir.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Logout!',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = '../logout.php'; // Redirect manual
+                }
+            });
         });
     </script>
 
