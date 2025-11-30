@@ -2,8 +2,19 @@
 session_start();
 require_once '../../config/database.php';
 
+// 1. Cek Login
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
+    exit();
+}
+
+// 2. PROTEKSI HAK AKSES (HANYA OWNER)
+// Jika role bukan 'owner', tolak akses & kembalikan ke dashboard
+if ($_SESSION['role'] !== 'owner') {
+    echo "<script>
+            alert('Akses Ditolak! Halaman Resep hanya untuk Owner.');
+            window.location.href = '../dashboard.php';
+          </script>";
     exit();
 }
 
@@ -77,6 +88,8 @@ foreach ($resep_group as $pid => $data) {
     foreach ($data['items'] as $item) {
         $butuh = $item['takaran'];
         $punya = $item['stok_gudang'];
+        // Note: Idealnya ada konversi satuan di sini (misal kg ke gram)
+        // Untuk sederhana, kita asumsikan satuan sama atau dihandle user
         $bisa_buat = ($butuh > 0) ? floor($punya / $butuh) : 0;
         if ($bisa_buat < $max_production) $max_production = $bisa_buat;
     }
@@ -155,37 +168,7 @@ foreach ($resep_group as $pid => $data) {
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-
-            <div class="nav-section-title">Inventory</div>
-            <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="index.php" class="nav-link active"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-
-            <div class="nav-section-title">Transaksi</div>
-            <a href="../pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -208,7 +191,7 @@ foreach ($resep_group as $pid => $data) {
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
+                    <a href="../logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -332,31 +315,17 @@ foreach ($resep_group as $pid => $data) {
         const bahanData = <?php echo json_encode($bahan_options_js); ?>;
         const existingRecipes = <?php echo json_encode($existing_recipes_js); ?>;
         
-        // Sidebar Mobile
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if(btnMobile) { btnMobile.addEventListener('click', () => { sidebar.classList.add('show'); overlay.classList.add('show'); }); }
-        if(overlay) { overlay.addEventListener('click', () => { sidebar.classList.remove('show'); overlay.classList.remove('show'); }); }
+        // SCRIPT TOGGLE SIDEBAR DIHAPUS (Sudah include)
 
         // SweetAlert Logout
         document.getElementById('btnLogout').addEventListener('click', function(e) {
             e.preventDefault(); 
+            const href = this.getAttribute('href');
             Swal.fire({
-                title: 'Keluar?',
-                text: "Anda harus login kembali nanti.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Keluar',
-                cancelButtonText: 'Batal',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '../logout.php'; 
-                }
-            });
+                title: 'Keluar?', text: "Anda harus login kembali nanti.", icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar'
+            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
         });
 
         // Add Row Function

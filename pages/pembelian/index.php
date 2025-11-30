@@ -2,10 +2,13 @@
 session_start();
 require_once '../../config/database.php';
 
+// Cek Login
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
     exit();
 }
+
+$role = $_SESSION['role']; // Simpan role
 
 // --- [LOGIC 1] AJAX HANDLER: DETAIL PEMBELIAN ---
 if (isset($_POST['get_detail_beli'])) {
@@ -47,8 +50,14 @@ if (isset($_POST['get_detail_beli'])) {
     exit();
 }
 
-// --- [LOGIC 2] HAPUS TRANSAKSI (STOK DIKEMBALIKAN/DIKURANGI) ---
+// --- [LOGIC 2] HAPUS TRANSAKSI (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
+    // Proteksi Backend
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
+
     $id_beli = clean_input($_GET['delete']);
     
     // Ambil item untuk kembalikan stok (karena pembelian dihapus, stok harus dikurangi lagi)
@@ -108,6 +117,7 @@ $result = $conn->query($query);
     <title>Data Pembelian - Dewi Cookies</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
     <style>
@@ -118,32 +128,7 @@ $result = $conn->query($query);
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-            <div class="nav-section-title">Inventory</div>
-            <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="../resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-            <div class="nav-section-title">Transaksi</div>
-            <a href="index.php" class="nav-link active"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -162,7 +147,7 @@ $result = $conn->query($query);
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger"><i class="bi bi-power"></i> Logout</a>
+                    <a href="../logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout"><i class="bi bi-power"></i> Logout</a>
                 </div>
             </div>
         </div>
@@ -180,6 +165,7 @@ $result = $conn->query($query);
             <div class="table-card">
                 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                     <h5 class="fw-bold text-brown m-0">Daftar Pembelian Bahan</h5>
+                    
                     <a href="create.php" class="btn-add text-decoration-none">
                         <i class="bi bi-plus-lg"></i> Pembelian Baru
                     </a>
@@ -234,7 +220,12 @@ $result = $conn->query($query);
                                                 onclick="showDetail(<?php echo $row['id_beli']; ?>, '<?php echo $row['nama_supplier']; ?>')" title="Lihat Detail">
                                             <i class="bi bi-eye"></i>
                                         </button>
-                                        <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus"><i class="bi bi-trash"></i></a>
+                                        
+                                        <?php if ($role == 'owner'): ?>
+                                        <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
@@ -280,17 +271,9 @@ $result = $conn->query($query);
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // Sidebar Mobile Toggle
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if(btnMobile) {
-            btnMobile.addEventListener('click', () => { sidebar.classList.add('show'); overlay.classList.add('show'); });
-        }
-        if(overlay) {
-            overlay.addEventListener('click', () => { sidebar.classList.remove('show'); overlay.classList.remove('show'); });
-        }
+        // NOTE: Sidebar toggle sudah include di sidebar.php
 
         // Detail AJAX
         function showDetail(idBeli, suppName) {
@@ -306,6 +289,17 @@ $result = $conn->query($query);
                 success: function(response) { $('#detailContent').html(response); }
             });
         }
+
+        // SWEETALERT LOGOUT
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); 
+            const href = this.getAttribute('href');
+            Swal.fire({
+                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar', cancelButtonText: 'Batal', reverseButtons: true
+            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
+        });
     </script>
 </body>
 </html>

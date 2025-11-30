@@ -9,9 +9,16 @@ if (!isset($_SESSION['user_id'])) {
 
 $success = '';
 $error = '';
+$role = $_SESSION['role']; // Simpan role untuk pengecekan
 
-// --- 1. LOGIKA DELETE ---
+// --- 1. LOGIKA DELETE (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
+    // Proteksi Backend
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
+
     $id = clean_input($_GET['delete']);
     
     // Cek relasi
@@ -37,47 +44,55 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// --- 2. LOGIKA CREATE ---
+// --- 2. LOGIKA CREATE (HANYA OWNER) ---
 if (isset($_POST['create_bahan'])) {
-    $nama_bahan = clean_input($_POST['nama_bahan']);
-    $satuan     = clean_input($_POST['satuan']);
-    $stok       = clean_input($_POST['stok']);
-    $stok_min   = clean_input($_POST['stok_min']);
-
-    if (empty($nama_bahan)) {
-        $error = "Nama bahan wajib diisi!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak menambah data.";
     } else {
-        $stmt = $conn->prepare("INSERT INTO bahan_baku (nama_bahan, satuan, stok, stok_min) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssii", $nama_bahan, $satuan, $stok, $stok_min);
-        
-        if ($stmt->execute()) {
-            $success = "Bahan baku berhasil ditambahkan!";
-            header("refresh:1;url=index.php");
+        $nama_bahan = clean_input($_POST['nama_bahan']);
+        $satuan     = clean_input($_POST['satuan']);
+        $stok       = clean_input($_POST['stok']);
+        $stok_min   = clean_input($_POST['stok_min']);
+
+        if (empty($nama_bahan)) {
+            $error = "Nama bahan wajib diisi!";
         } else {
-            $error = "Gagal: " . $conn->error;
+            $stmt = $conn->prepare("INSERT INTO bahan_baku (nama_bahan, satuan, stok, stok_min) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssii", $nama_bahan, $satuan, $stok, $stok_min);
+            
+            if ($stmt->execute()) {
+                $success = "Bahan baku berhasil ditambahkan!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal: " . $conn->error;
+            }
         }
     }
 }
 
-// --- 3. LOGIKA UPDATE ---
+// --- 3. LOGIKA UPDATE (HANYA OWNER) ---
 if (isset($_POST['update_bahan'])) {
-    $id_bahan   = clean_input($_POST['id_bahan']);
-    $nama_bahan = clean_input($_POST['nama_bahan']);
-    $satuan     = clean_input($_POST['satuan']);
-    $stok       = clean_input($_POST['stok']);
-    $stok_min   = clean_input($_POST['stok_min']);
-
-    if (empty($nama_bahan)) {
-        $error = "Nama bahan wajib diisi!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak mengubah data.";
     } else {
-        $stmt = $conn->prepare("UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?");
-        $stmt->bind_param("ssiii", $nama_bahan, $satuan, $stok, $stok_min, $id_bahan);
-        
-        if ($stmt->execute()) {
-            $success = "Data bahan baku berhasil diperbarui!";
-            header("refresh:1;url=index.php");
+        $id_bahan   = clean_input($_POST['id_bahan']);
+        $nama_bahan = clean_input($_POST['nama_bahan']);
+        $satuan     = clean_input($_POST['satuan']);
+        $stok       = clean_input($_POST['stok']);
+        $stok_min   = clean_input($_POST['stok_min']);
+
+        if (empty($nama_bahan)) {
+            $error = "Nama bahan wajib diisi!";
         } else {
-            $error = "Gagal update: " . $conn->error;
+            $stmt = $conn->prepare("UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?");
+            $stmt->bind_param("ssiii", $nama_bahan, $satuan, $stok, $stok_min, $id_bahan);
+            
+            if ($stmt->execute()) {
+                $success = "Data bahan baku berhasil diperbarui!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal update: " . $conn->error;
+            }
         }
     }
 }
@@ -93,62 +108,23 @@ $result = $conn->query($query);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bahan Baku - Dewi Cookies</title>
-    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
-
     <style>
         .badge-status { padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
         .badge-aman { background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
         .badge-warning { background: #FFF3E0; color: #EF6C00; border: 1px solid #FFE0B2; }
         .badge-danger { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
-        
-        /* Modal & Button Style */
-        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
-        .modal-title { font-weight: 700; color: var(--primary-color); }
         .text-brown { color: var(--primary-color) !important; }
         .btn-brown { background-color: var(--primary-color); color: white; }
-        .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-
-            <div class="nav-section-title">Inventory</div>
-            <a href="index.php" class="nav-link active"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="../resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-
-            <div class="nav-section-title">Transaksi</div>
-            <a href="../pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -171,7 +147,7 @@ $result = $conn->query($query);
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
+                    <a href="../logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -189,9 +165,12 @@ $result = $conn->query($query);
                         <h5 class="fw-bold text-brown mb-1">Daftar Stok Bahan</h5>
                         <p class="text-muted small mb-0">Pantau ketersediaan bahan baku produksi</p>
                     </div>
+                    
+                    <?php if ($role == 'owner'): ?>
                     <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
                         <i class="bi bi-plus-lg me-2"></i>Tambah
                     </button>
+                    <?php endif; ?>
                 </div>
 
                 <div class="table-responsive">
@@ -228,20 +207,24 @@ $result = $conn->query($query);
                                     <td class="px-3 text-muted"><?php echo $row['stok_min']; ?></td>
                                     <td class="px-3"><?php echo $status; ?></td>
                                     <td class="px-3 text-end">
-                                        <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#editModal"
-                                                data-id="<?php echo $row['id_bahan']; ?>"
-                                                data-nama="<?php echo $row['nama_bahan']; ?>"
-                                                data-satuan="<?php echo $row['satuan']; ?>"
-                                                data-stok="<?php echo $row['stok']; ?>"
-                                                data-min="<?php echo $row['stok_min']; ?>">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
+                                        <?php if ($role == 'owner'): ?>
+                                            <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#editModal"
+                                                    data-id="<?php echo $row['id_bahan']; ?>"
+                                                    data-nama="<?php echo $row['nama_bahan']; ?>"
+                                                    data-satuan="<?php echo $row['satuan']; ?>"
+                                                    data-stok="<?php echo $row['stok']; ?>"
+                                                    data-min="<?php echo $row['stok_min']; ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
 
-                                        <a href="?delete=<?php echo $row['id_bahan']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Yakin ingin menghapus?')">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                            <a href="?delete=<?php echo $row['id_bahan']; ?>" class="btn btn-sm btn-danger rounded-2" onclick="return confirm('Yakin ingin menghapus?')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        <?php else: ?>
+                                            <span class="badge bg-light text-muted border">Read Only</span>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
@@ -254,47 +237,25 @@ $result = $conn->query($query);
         </div>
     </div>
 
+    <?php if ($role == 'owner'): ?>
     <div class="modal fade" id="addModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Tambah Bahan Baru</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Tambah Bahan Baru</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form method="POST">
                     <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Nama Bahan</label>
-                            <input type="text" class="form-control rounded-3" name="nama_bahan" required placeholder="Contoh: Tepung Terigu">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Satuan</label>
+                        <div class="mb-3"><label class="form-label small fw-bold">Nama Bahan</label><input type="text" class="form-control rounded-3" name="nama_bahan" required placeholder="Contoh: Tepung Terigu"></div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Satuan</label>
                             <select class="form-select rounded-3" name="satuan" required>
-                                <option value="">-- Pilih --</option>
-                                <option value="kg">Kilogram (kg)</option>
-                                <option value="gram">Gram (g)</option>
-                                <option value="liter">Liter (L)</option>
-                                <option value="ml">Mililiter (ml)</option>
-                                <option value="pcs">Pieces (pcs)</option>
-                                <option value="pack">Pack</option>
-                                <option value="butir">Butir</option>
+                                <option value="">-- Pilih --</option><option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="liter">Liter (L)</option><option value="ml">Mililiter (ml)</option><option value="pcs">Pieces (pcs)</option><option value="pack">Pack</option><option value="butir">Butir</option>
                             </select>
                         </div>
                         <div class="row g-3">
-                            <div class="col-6">
-                                <label class="form-label small fw-bold">Stok Awal</label>
-                                <input type="number" class="form-control rounded-3" name="stok" value="0">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold text-danger">Min. Stok (Alert)</label>
-                                <input type="number" class="form-control rounded-3" name="stok_min" value="5">
-                            </div>
+                            <div class="col-6"><label class="form-label small fw-bold">Stok Awal</label><input type="number" class="form-control rounded-3" name="stok" value="0"></div>
+                            <div class="col-6"><label class="form-label small fw-bold text-danger">Min. Stok (Alert)</label><input type="number" class="form-control rounded-3" name="stok_min" value="5"></div>
                         </div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="create_bahan" class="btn btn-brown rounded-3 px-4">Simpan</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="create_bahan" class="btn btn-brown rounded-3 px-4">Simpan</button></div>
                 </form>
             </div>
         </div>
@@ -303,101 +264,54 @@ $result = $conn->query($query);
     <div class="modal fade" id="editModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Edit Bahan Baku</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Edit Bahan Baku</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form method="POST">
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_bahan" id="edit_id">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Nama Bahan</label>
-                            <input type="text" class="form-control rounded-3" name="nama_bahan" id="edit_nama" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Satuan</label>
+                        <div class="mb-3"><label class="form-label small fw-bold">Nama Bahan</label><input type="text" class="form-control rounded-3" name="nama_bahan" id="edit_nama" required></div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Satuan</label>
                             <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
-                                <option value="kg">Kilogram (kg)</option>
-                                <option value="gram">Gram (g)</option>
-                                <option value="liter">Liter (L)</option>
-                                <option value="ml">Mililiter (ml)</option>
-                                <option value="pcs">Pieces (pcs)</option>
-                                <option value="pack">Pack</option>
-                                <option value="butir">Butir</option>
+                                <option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="liter">Liter (L)</option><option value="ml">Mililiter (ml)</option><option value="pcs">Pieces (pcs)</option><option value="pack">Pack</option><option value="butir">Butir</option>
                             </select>
                         </div>
                         <div class="row g-3">
-                            <div class="col-6">
-                                <label class="form-label small fw-bold">Stok Saat Ini</label>
-                                <input type="number" class="form-control rounded-3" name="stok" id="edit_stok">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold text-danger">Min. Stok</label>
-                                <input type="number" class="form-control rounded-3" name="stok_min" id="edit_min">
-                            </div>
+                            <div class="col-6"><label class="form-label small fw-bold">Stok Saat Ini</label><input type="number" class="form-control rounded-3" name="stok" id="edit_stok"></div>
+                            <div class="col-6"><label class="form-label small fw-bold text-danger">Min. Stok</label><input type="number" class="form-control rounded-3" name="stok_min" id="edit_min"></div>
                         </div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="update_bahan" class="btn btn-brown rounded-3 px-4">Update</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="update_bahan" class="btn btn-brown rounded-3 px-4">Update</button></div>
                 </form>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        // Toggle Sidebar
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-
-        if(btnMobile) {
-            btnMobile.addEventListener('click', () => {
-                sidebar.classList.add('show');
-                overlay.classList.add('show');
-            });
-        }
-        if(overlay) {
-            overlay.addEventListener('click', () => {
-                sidebar.classList.remove('show');
-                overlay.classList.remove('show');
-            });
-        }
-
-        // Modal Edit
+        // Modal Edit Script (Cek exists dulu, krn modal bisa gak dirender)
         const editModal = document.getElementById('editModal');
-        editModal.addEventListener('show.bs.modal', event => {
-            const button = event.relatedTarget;
-            document.getElementById('edit_id').value = button.getAttribute('data-id');
-            document.getElementById('edit_nama').value = button.getAttribute('data-nama');
-            document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
-            document.getElementById('edit_stok').value = button.getAttribute('data-stok');
-            document.getElementById('edit_min').value = button.getAttribute('data-min');
-        });
+        if(editModal) {
+            editModal.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                document.getElementById('edit_id').value = button.getAttribute('data-id');
+                document.getElementById('edit_nama').value = button.getAttribute('data-nama');
+                document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
+                document.getElementById('edit_stok').value = button.getAttribute('data-stok');
+                document.getElementById('edit_min').value = button.getAttribute('data-min');
+            });
+        }
 
-        // SWEETALERT LOGOUT (PATH: ../logout.php)
+        // SWEETALERT LOGOUT
         document.getElementById('btnLogout').addEventListener('click', function(e) {
             e.preventDefault(); 
-            
+            const href = this.getAttribute('href');
             Swal.fire({
-                title: 'Keluar?',
-                text: "Anda harus login kembali nanti.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Keluar',
-                cancelButtonText: 'Batal',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '../logout.php'; 
-                }
-            });
+                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar', cancelButtonText: 'Batal', reverseButtons: true
+            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
         });
     </script>
 </body>

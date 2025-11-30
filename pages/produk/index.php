@@ -2,6 +2,7 @@
 session_start();
 require_once '../../config/database.php';
 
+// Cek Login
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
     exit();
@@ -9,12 +10,18 @@ if (!isset($_SESSION['user_id'])) {
 
 $success = '';
 $error = '';
+$role = $_SESSION['role']; // Simpan role
 
-// --- 1. LOGIKA DELETE ---
+// --- 1. LOGIKA DELETE (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
+    
     $id = clean_input($_GET['delete']);
     
-    // Cek relasi: Apakah produk ada di Resep atau Detail Penjualan?
+    // Cek relasi data (Resep & Penjualan)
     $check_resep = $conn->query("SELECT COUNT(*) as count FROM resep WHERE id_produk = $id")->fetch_assoc();
     $check_jual  = $conn->query("SELECT COUNT(*) as count FROM detail_penjualan WHERE id_produk = $id")->fetch_assoc();
     
@@ -36,50 +43,62 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// --- 2. LOGIKA CREATE (TAMBAH) ---
+// --- 2. LOGIKA CREATE (HANYA OWNER) ---
 if (isset($_POST['create_produk'])) {
-    $nama   = clean_input($_POST['nama_produk']);
-    $satuan = clean_input($_POST['satuan']);
-    $harga  = clean_input($_POST['harga_jual']);
-    $stok   = clean_input($_POST['stok']);
-
-    if (empty($nama)) {
-        $error = "Nama produk wajib diisi!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak menambah produk baru.";
     } else {
-        $query = "INSERT INTO produk (nama_produk, satuan, harga_jual, stok) VALUES (?, ?, ?, ?)";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("ssii", $nama, $satuan, $harga, $stok);
-        
-        if ($stmt->execute()) {
-            $success = "Produk berhasil ditambahkan!";
-            header("refresh:1;url=index.php");
+        $nama   = clean_input($_POST['nama_produk']);
+        $satuan = clean_input($_POST['satuan']);
+        $harga  = clean_input($_POST['harga_jual']);
+        $stok   = clean_input($_POST['stok']);
+
+        if (empty($nama)) {
+            $error = "Nama produk wajib diisi!";
         } else {
-            $error = "Gagal: " . $conn->error;
+            $query = "INSERT INTO produk (nama_produk, satuan, harga_jual, stok) VALUES (?, ?, ?, ?)";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("ssii", $nama, $satuan, $harga, $stok);
+            
+            if ($stmt->execute()) {
+                $success = "Produk berhasil ditambahkan!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal: " . $conn->error;
+            }
         }
     }
 }
 
-// --- 3. LOGIKA UPDATE (EDIT) ---
+// --- 3. LOGIKA UPDATE (BISA SEMUA, TAPI DIBATASI) ---
 if (isset($_POST['update_produk'])) {
     $id     = clean_input($_POST['id_produk']);
-    $nama   = clean_input($_POST['nama_produk']);
-    $satuan = clean_input($_POST['satuan']);
-    $harga  = clean_input($_POST['harga_jual']);
-    $stok   = clean_input($_POST['stok']);
+    $stok   = clean_input($_POST['stok']); // Semua role boleh update stok
+    
+    // Ambil data lama untuk keamanan (jika bukan owner)
+    $old_data = $conn->query("SELECT * FROM produk WHERE id_produk = $id")->fetch_assoc();
 
-    if (empty($nama)) {
-        $error = "Nama produk wajib diisi!";
+    if ($role == 'owner') {
+        // Owner: Ambil data dari input form (Bisa ubah semua)
+        $nama   = clean_input($_POST['nama_produk']);
+        $satuan = clean_input($_POST['satuan']);
+        $harga  = clean_input($_POST['harga_jual']);
     } else {
-        $query = "UPDATE produk SET nama_produk=?, satuan=?, harga_jual=?, stok=? WHERE id_produk=?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("ssiii", $nama, $satuan, $harga, $stok, $id);
-        
-        if ($stmt->execute()) {
-            $success = "Data produk berhasil diperbarui!";
-            header("refresh:1;url=index.php");
-        } else {
-            $error = "Gagal update: " . $conn->error;
-        }
+        // Karyawan: Paksa pakai data lama untuk Nama & Harga (Cegah hack inspect element)
+        $nama   = $old_data['nama_produk'];
+        $satuan = $old_data['satuan'];
+        $harga  = $old_data['harga_jual'];
+    }
+
+    $query = "UPDATE produk SET nama_produk=?, satuan=?, harga_jual=?, stok=? WHERE id_produk=?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("ssiii", $nama, $satuan, $harga, $stok, $id);
+    
+    if ($stmt->execute()) {
+        $success = "Data produk berhasil diperbarui!";
+        header("refresh:1;url=index.php");
+    } else {
+        $error = "Gagal update: " . $conn->error;
     }
 }
 
@@ -103,52 +122,17 @@ $result = $conn->query($query);
     <link rel="stylesheet" href="../../assets/css/custom.css">
 
     <style>
-        /* Style Tambahan Khusus Halaman Ini */
         .badge-status { padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
         .badge-aman { background: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
         .badge-warning { background: #FFF3E0; color: #EF6C00; border: 1px solid #FFE0B2; }
         .badge-danger { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
-        
-        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
-        .modal-title { font-weight: 700; color: var(--primary-color); }
         .text-brown { color: var(--primary-color) !important; }
         .btn-brown { background-color: var(--primary-color); color: white; }
-        .btn-brown:hover { background-color: #6F3410; color: white; }
     </style>
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-
-            <div class="nav-section-title">Inventory</div>
-            <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="index.php" class="nav-link active"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="../resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-
-            <div class="nav-section-title">Transaksi</div>
-            <a href="../pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -171,7 +155,7 @@ $result = $conn->query($query);
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
+                    <a href="../logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -189,9 +173,12 @@ $result = $conn->query($query);
                         <h5 class="fw-bold text-brown mb-1">Daftar Produk</h5>
                         <p class="text-muted small mb-0">Manajemen stok barang jadi</p>
                     </div>
+                    
+                    <?php if ($role == 'owner'): ?>
                     <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
                         <i class="bi bi-plus-lg me-2"></i>Produk Baru
                     </button>
+                    <?php endif; ?>
                 </div>
 
                 <div class="table-responsive">
@@ -226,7 +213,7 @@ $result = $conn->query($query);
                                     <td class="px-3 fw-bold text-dark"><?php echo htmlspecialchars($row['nama_produk']); ?></td>
                                     <td class="px-3"><?php echo htmlspecialchars($row['satuan']); ?></td>
                                     <td class="px-3">Rp <?php echo number_format($row['harga_jual'], 0, ',', '.'); ?></td>
-                                    <td class="px-3 fw-bold"><?php echo $row['stok']; ?></td>
+                                    <td class="px-3 fw-bold bg-light text-center border"><?php echo $row['stok']; ?></td>
                                     <td class="px-3"><?php echo $status; ?></td>
                                     <td class="px-3 text-end">
                                         <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
@@ -237,12 +224,14 @@ $result = $conn->query($query);
                                                 data-satuan="<?php echo $row['satuan']; ?>"
                                                 data-harga="<?php echo $row['harga_jual']; ?>"
                                                 data-stok="<?php echo $row['stok']; ?>">
-                                            <i class="bi bi-pencil"></i>
+                                            <i class="bi bi-pencil"></i> <?php echo ($role == 'owner') ? 'Edit' : 'Update Stok'; ?>
                                         </button>
 
+                                        <?php if ($role == 'owner'): ?>
                                         <a href="?delete=<?php echo $row['id_produk']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Yakin ingin menghapus produk ini?')">
                                             <i class="bi bi-trash"></i>
                                         </a>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
@@ -257,7 +246,8 @@ $result = $conn->query($query);
         </div>
     </div>
 
-    <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+    <?php if ($role == 'owner'): ?>
+    <div class="modal fade" id="addModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
@@ -270,7 +260,6 @@ $result = $conn->query($query);
                             <label class="form-label small fw-bold">Nama Produk</label>
                             <input type="text" class="form-control rounded-3" name="nama_produk" placeholder="Contoh: Nastar Keju" required>
                         </div>
-                        
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Satuan</label>
@@ -287,26 +276,27 @@ $result = $conn->query($query);
                                 <input type="number" class="form-control rounded-3" name="stok" value="0" min="0">
                             </div>
                         </div>
-
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Harga Jual (Rp)</label>
                             <input type="number" class="form-control rounded-3" name="harga_jual" placeholder="0" min="0" required>
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" name="create_produk" class="btn btn-brown rounded-3 px-4">Simpan</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
-    <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="editModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Edit Produk</h5>
+                    <h5 class="modal-title fw-bold">
+                        <?php echo ($role == 'owner') ? 'Edit Produk' : 'Update Stok Produksi'; ?>
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
@@ -315,33 +305,41 @@ $result = $conn->query($query);
                         
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Nama Produk</label>
-                            <input type="text" class="form-control rounded-3" name="nama_produk" id="edit_nama" required>
+                            <input type="text" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
+                                   name="nama_produk" id="edit_nama" 
+                                   <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Satuan</label>
-                                <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
-                                    <option value="toples">Toples</option>
-                                    <option value="pcs">Pcs</option>
-                                    <option value="box">Box</option>
-                                    <option value="pack">Pack</option>
-                                </select>
+                                <?php if ($role == 'owner'): ?>
+                                    <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
+                                        <option value="toples">Toples</option>
+                                        <option value="pcs">Pcs</option>
+                                        <option value="box">Box</option>
+                                        <option value="pack">Pack</option>
+                                    </select>
+                                <?php else: ?>
+                                    <input type="text" class="form-control rounded-3 bg-light" name="satuan" id="edit_satuan_text" readonly>
+                                <?php endif; ?>
                             </div>
+
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Stok</label>
-                                <input type="number" class="form-control rounded-3" name="stok" id="edit_stok" min="0">
+                                <label class="form-label small fw-bold text-success">Stok (Update Disini)</label>
+                                <input type="number" class="form-control rounded-3 border-success" name="stok" id="edit_stok" min="0">
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Harga Jual (Rp)</label>
-                            <input type="number" class="form-control rounded-3" name="harga_jual" id="edit_harga" min="0" required>
+                            <input type="number" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
+                                   name="harga_jual" id="edit_harga" min="0" 
+                                   <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">Update</button>
+                        <button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">Simpan Perubahan</button>
                     </div>
                 </form>
             </div>
@@ -352,53 +350,33 @@ $result = $conn->query($query);
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        // Sidebar Mobile
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-
-        if(btnMobile) {
-            btnMobile.addEventListener('click', () => {
-                sidebar.classList.add('show');
-                overlay.classList.add('show');
-            });
-        }
-        if(overlay) {
-            overlay.addEventListener('click', () => {
-                sidebar.classList.remove('show');
-                overlay.classList.remove('show');
-            });
-        }
-
-        // Modal Edit
+        // Modal Edit Script
         const editModal = document.getElementById('editModal');
         editModal.addEventListener('show.bs.modal', event => {
             const button = event.relatedTarget;
             document.getElementById('edit_id').value = button.getAttribute('data-id');
             document.getElementById('edit_nama').value = button.getAttribute('data-nama');
-            document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
-            document.getElementById('edit_harga').value = button.getAttribute('data-harga');
             document.getElementById('edit_stok').value = button.getAttribute('data-stok');
+            document.getElementById('edit_harga').value = button.getAttribute('data-harga');
+
+            // Handle Dropdown vs Text (karena struktur beda antara owner & karyawan)
+            const role = "<?php echo $role; ?>";
+            if(role === 'owner') {
+                document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
+            } else {
+                document.getElementById('edit_satuan_text').value = button.getAttribute('data-satuan');
+            }
         });
 
-        // SweetAlert Logout
+        // SWEETALERT LOGOUT
         document.getElementById('btnLogout').addEventListener('click', function(e) {
             e.preventDefault(); 
+            const href = this.getAttribute('href');
             Swal.fire({
-                title: 'Keluar?',
-                text: "Sesi Anda akan berakhir.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Keluar',
-                cancelButtonText: 'Batal',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '../logout.php'; 
-                }
-            });
+                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar', cancelButtonText: 'Batal', reverseButtons: true
+            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
         });
     </script>
 

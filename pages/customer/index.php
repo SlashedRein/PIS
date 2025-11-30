@@ -10,12 +10,17 @@ if (!isset($_SESSION['user_id'])) {
 
 $success = '';
 $error = '';
+$role = $_SESSION['role'];
 
-// --- 1. LOGIKA DELETE ---
+// --- 1. LOGIKA DELETE (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
-    $id = clean_input($_GET['delete']);
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
     
-    // Cek relasi data
+    $id = clean_input($_GET['delete']);
+    // Cek relasi
     $check_query = "SELECT COUNT(*) as count FROM penjualan WHERE id_cust = ?";
     $stmt = $conn->prepare($check_query);
     $stmt->bind_param("i", $id);
@@ -28,7 +33,6 @@ if (isset($_GET['delete'])) {
         $delete_query = "DELETE FROM customer WHERE id_cust = ?";
         $stmt = $conn->prepare($delete_query);
         $stmt->bind_param("i", $id);
-        
         if ($stmt->execute()) {
             $success = "Data customer berhasil dihapus!";
             header("refresh:1;url=index.php");
@@ -38,52 +42,58 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// --- 2. LOGIKA CREATE ---
+// --- 2. LOGIKA CREATE (HANYA OWNER) ---
 if (isset($_POST['create_customer'])) {
-    $nama    = clean_input($_POST['nama']);
-    $alamat  = clean_input($_POST['alamat']);
-    $no_telp = clean_input($_POST['no_telp']);
-
-    if (empty($nama)) {
-        $error = "Nama customer wajib diisi!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak menambah data.";
     } else {
-        $stmt = $conn->prepare("INSERT INTO customer (nama, alamat, no_telp) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $nama, $alamat, $no_telp);
-        
-        if ($stmt->execute()) {
-            $success = "Customer berhasil ditambahkan!";
-            header("refresh:1;url=index.php");
+        $nama    = clean_input($_POST['nama']);
+        $alamat  = clean_input($_POST['alamat']);
+        $no_telp = clean_input($_POST['no_telp']);
+
+        if (empty($nama)) {
+            $error = "Nama customer wajib diisi!";
         } else {
-            $error = "Gagal: " . $conn->error;
+            $stmt = $conn->prepare("INSERT INTO customer (nama, alamat, no_telp) VALUES (?, ?, ?)");
+            $stmt->bind_param("sss", $nama, $alamat, $no_telp);
+            
+            if ($stmt->execute()) {
+                $success = "Customer berhasil ditambahkan!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal: " . $conn->error;
+            }
         }
     }
 }
 
-// --- 3. LOGIKA UPDATE ---
+// --- 3. LOGIKA UPDATE (HANYA OWNER) ---
 if (isset($_POST['update_customer'])) {
-    $id_cust = clean_input($_POST['id_cust']);
-    $nama    = clean_input($_POST['nama']);
-    $alamat  = clean_input($_POST['alamat']);
-    $no_telp = clean_input($_POST['no_telp']);
-
-    if (empty($nama)) {
-        $error = "Nama customer wajib diisi!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak mengubah data.";
     } else {
-        $stmt = $conn->prepare("UPDATE customer SET nama=?, alamat=?, no_telp=? WHERE id_cust=?");
-        $stmt->bind_param("sssi", $nama, $alamat, $no_telp, $id_cust);
-        
-        if ($stmt->execute()) {
-            $success = "Data customer berhasil diperbarui!";
-            header("refresh:1;url=index.php");
+        $id_cust = clean_input($_POST['id_cust']);
+        $nama    = clean_input($_POST['nama']);
+        $alamat  = clean_input($_POST['alamat']);
+        $no_telp = clean_input($_POST['no_telp']);
+
+        if (empty($nama)) {
+            $error = "Nama customer wajib diisi!";
         } else {
-            $error = "Gagal update: " . $conn->error;
+            $stmt = $conn->prepare("UPDATE customer SET nama=?, alamat=?, no_telp=? WHERE id_cust=?");
+            $stmt->bind_param("sssi", $nama, $alamat, $no_telp, $id_cust);
+            
+            if ($stmt->execute()) {
+                $success = "Data customer berhasil diperbarui!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal update: " . $conn->error;
+            }
         }
     }
 }
 
-// Ambil Data
-$query = "SELECT * FROM customer ORDER BY nama ASC";
-$result = $conn->query($query);
+$result = $conn->query("SELECT * FROM customer ORDER BY nama ASC");
 ?>
 
 <!DOCTYPE html>
@@ -92,56 +102,15 @@ $result = $conn->query($query);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Customer - Dewi Cookies</title>
-    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
-    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
-
-    <style>
-        .modal-header { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.1); }
-        .modal-title { font-weight: 700; color: var(--primary-color); }
-        .text-brown { color: var(--primary-color) !important; }
-        .btn-brown { background-color: var(--primary-color); color: white; }
-        .btn-brown:hover { background-color: #6F3410; color: white; }
-    </style>
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="index.php" class="nav-link active"><i class="bi bi-people"></i> <span>Customer</span></a>
-
-            <div class="nav-section-title">Inventory</div>
-            <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="../resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-
-            <div class="nav-section-title">Transaksi</div>
-            <a href="../pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -163,9 +132,8 @@ $result = $conn->query($query);
                         <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
                     </div>
                 </div>
-                
                 <div class="dropdown-menu-custom">
-                    <a href="#" class="dropdown-item-custom logout text-danger" id="btnLogout">
+                    <a href="logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -173,7 +141,6 @@ $result = $conn->query($query);
         </div>
 
         <div class="content-area p-4">
-            
             <?php if ($success): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
             <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
@@ -183,9 +150,11 @@ $result = $conn->query($query);
                         <h5 class="fw-bold text-brown mb-1">Daftar Pelanggan</h5>
                         <p class="text-muted small mb-0">Database kontak customer</p>
                     </div>
-                    <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
-                        <i class="bi bi-plus-lg me-2"></i>Tambah Customer
-                    </button>
+                    <?php if ($role == 'owner'): ?>
+                        <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addModal">
+                            <i class="bi bi-plus-lg me-2"></i>Tambah Customer
+                        </button>
+                    <?php endif; ?>
                 </div>
 
                 <div class="table-responsive">
@@ -211,19 +180,22 @@ $result = $conn->query($query);
                                     <td class="px-3 text-muted small"><?php echo htmlspecialchars($row['alamat'] ?? '-'); ?></td>
                                     <td class="px-3"><?php echo htmlspecialchars($row['no_telp'] ?? '-'); ?></td>
                                     <td class="px-3 text-end">
-                                        <button class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#editModal"
-                                                data-id="<?php echo $row['id_cust']; ?>"
-                                                data-nama="<?php echo $row['nama']; ?>"
-                                                data-alamat="<?php echo $row['alamat']; ?>"
-                                                data-telp="<?php echo $row['no_telp']; ?>">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-
-                                        <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Hapus data ini?')">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                        <?php if ($role == 'owner'): ?>
+                                            <button class="btn btn-sm btn-warning text-white rounded-2 me-1" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#editModal"
+                                                    data-id="<?php echo $row['id_cust']; ?>"
+                                                    data-nama="<?php echo $row['nama']; ?>"
+                                                    data-alamat="<?php echo $row['alamat']; ?>"
+                                                    data-telp="<?php echo $row['no_telp']; ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <a href="?delete=<?php echo $row['id_cust']; ?>" class="btn btn-sm btn-danger rounded-2" onclick="return confirm('Hapus data ini?')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        <?php else: ?>
+                                            <span class="badge bg-light text-muted border">Read Only</span>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
@@ -236,122 +208,82 @@ $result = $conn->query($query);
         </div>
     </div>
 
-    <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+    <?php if ($role == 'owner'): ?>
+    <div class="modal fade" id="addModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Tambah Customer</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Tambah Customer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form method="POST">
                     <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label small">Nama Customer *</label>
-                            <input type="text" class="form-control rounded-3" name="nama" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Alamat</label>
-                            <textarea class="form-control rounded-3" name="alamat" rows="2"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">No Telepon</label>
-                            <input type="text" class="form-control rounded-3" name="no_telp">
-                        </div>
+                        <div class="mb-3"><label class="form-label small">Nama Customer *</label><input type="text" class="form-control rounded-3" name="nama" required></div>
+                        <div class="mb-3"><label class="form-label small">Alamat</label><textarea class="form-control rounded-3" name="alamat" rows="2"></textarea></div>
+                        <div class="mb-3"><label class="form-label small">No Telepon</label><input type="text" class="form-control rounded-3" name="no_telp"></div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="create_customer" class="btn btn-brown rounded-3 px-4">Simpan</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="create_customer" class="btn btn-brown rounded-3 px-4">Simpan</button></div>
                 </form>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="editModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Edit Customer</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Edit Customer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form method="POST">
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_cust" id="edit_id">
-                        <div class="mb-3">
-                            <label class="form-label small">Nama Customer *</label>
-                            <input type="text" class="form-control rounded-3" name="nama" id="edit_nama" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Alamat</label>
-                            <textarea class="form-control rounded-3" name="alamat" id="edit_alamat" rows="2"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">No Telepon</label>
-                            <input type="text" class="form-control rounded-3" name="no_telp" id="edit_telp">
-                        </div>
+                        <div class="mb-3"><label class="form-label small">Nama Customer *</label><input type="text" class="form-control rounded-3" name="nama" id="edit_nama" required></div>
+                        <div class="mb-3"><label class="form-label small">Alamat</label><textarea class="form-control rounded-3" name="alamat" id="edit_alamat" rows="2"></textarea></div>
+                        <div class="mb-3"><label class="form-label small">No Telepon</label><input type="text" class="form-control rounded-3" name="no_telp" id="edit_telp"></div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="update_customer" class="btn btn-brown rounded-3 px-4">Update</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="update_customer" class="btn btn-brown rounded-3 px-4">Update</button></div>
                 </form>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
     <script>
-        // Sidebar Toggle Mobile
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-
-        if(btnMobile) {
-            btnMobile.addEventListener('click', () => {
-                sidebar.classList.add('show');
-                overlay.classList.add('show');
-            });
-        }
-        if(overlay) {
-            overlay.addEventListener('click', () => {
-                sidebar.classList.remove('show');
-                overlay.classList.remove('show');
-            });
-        }
-
-        // Logic Modal Edit
         const editModal = document.getElementById('editModal');
-        editModal.addEventListener('show.bs.modal', event => {
-            const btn = event.relatedTarget;
-            document.getElementById('edit_id').value = btn.getAttribute('data-id');
-            document.getElementById('edit_nama').value = btn.getAttribute('data-nama');
-            document.getElementById('edit_alamat').value = btn.getAttribute('data-alamat');
-            document.getElementById('edit_telp').value = btn.getAttribute('data-telp');
-        });
-
-        // SWEETALERT LOGOUT
-        document.getElementById('btnLogout').addEventListener('click', function(e) {
-            e.preventDefault(); // Cegah link langsung jalan
-            
-            Swal.fire({
-                title: 'Yakin ingin keluar?',
-                text: "Sesi Anda akan berakhir.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Logout!',
-                cancelButtonText: 'Batal',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '../logout.php'; // Redirect manual
-                }
+        if (editModal) {
+            editModal.addEventListener('show.bs.modal', event => {
+                const btn = event.relatedTarget;
+                document.getElementById('edit_id').value = btn.getAttribute('data-id');
+                document.getElementById('edit_nama').value = btn.getAttribute('data-nama');
+                document.getElementById('edit_alamat').value = btn.getAttribute('data-alamat');
+                document.getElementById('edit_telp').value = btn.getAttribute('data-telp');
             });
-        });
+        }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    // ... script toggle sidebar (jika ada) ...
 
+        // Script SweetAlert Logout
+        const btnLogout = document.getElementById('btnLogout');
+        if(btnLogout) {
+            btnLogout.addEventListener('click', function(e) {
+                e.preventDefault(); // Mencegah link langsung jalan
+                const href = this.getAttribute('href'); // Ambil alamat logout
+
+                Swal.fire({
+                    title: 'Yakin ingin keluar?',
+                    text: "Sesi Anda akan berakhir.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Ya, Keluar!',
+                    cancelButtonText: 'Batal',
+                    reverseButtons: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = href; // Redirect manual jika user klik Ya
+                    }
+                });
+            });
+        }
+    </script>
 </body>
 </html>

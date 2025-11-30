@@ -2,18 +2,29 @@
 require_once '../config/database.php';
 session_start();
 
+// Cek Login
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login.php"); // Perbaikan redirect jika belum login
+    header("Location: ../login.php"); 
     exit();
 }
 
-// --- QUERY DATA DASHBOARD ---
+$role = $_SESSION['role']; // Simpan role biar gampang ngeceknya
+
+// --- QUERY DATA STOK (Untuk Semua Role) ---
 $bahan_alert = $conn->query("SELECT COUNT(*) as jumlah FROM bahan_baku WHERE stok <= stok_min")->fetch_assoc()['jumlah'];
 $produk_alert = $conn->query("SELECT COUNT(*) as jumlah FROM produk WHERE stok < 10")->fetch_assoc()['jumlah'];
-$total_penjualan = $conn->query("SELECT COALESCE(SUM(total), 0) as total FROM penjualan WHERE MONTH(tgl_penjualan) = MONTH(CURRENT_DATE) AND YEAR(tgl_penjualan) = YEAR(CURRENT_DATE)")->fetch_assoc()['total'];
-$total_pembelian = $conn->query("SELECT COALESCE(SUM(total_beli), 0) as total FROM pembelian WHERE MONTH(tgl) = MONTH(CURRENT_DATE) AND YEAR(tgl) = YEAR(CURRENT_DATE)")->fetch_assoc()['total'];
+
 $result_detail_bahan = $conn->query("SELECT * FROM bahan_baku WHERE stok <= stok_min ORDER BY stok ASC LIMIT 5");
 $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER BY stok ASC LIMIT 5");
+
+// --- QUERY DATA KEUANGAN (Hanya Owner) ---
+$total_penjualan = 0;
+$total_pembelian = 0;
+
+if ($role == 'owner') {
+    $total_penjualan = $conn->query("SELECT COALESCE(SUM(total), 0) as total FROM penjualan WHERE MONTH(tgl_penjualan) = MONTH(CURRENT_DATE) AND YEAR(tgl_penjualan) = YEAR(CURRENT_DATE)")->fetch_assoc()['total'];
+    $total_pembelian = $conn->query("SELECT COALESCE(SUM(total_beli), 0) as total FROM pembelian WHERE MONTH(tgl) = MONTH(CURRENT_DATE) AND YEAR(tgl) = YEAR(CURRENT_DATE)")->fetch_assoc()['total'];
+}
 ?>
 
 <!DOCTYPE html>
@@ -26,9 +37,9 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/custom.css">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     
     <style>
-        /* ANIMASI HOVER UNTUK KARTU DASHBOARD */
         .hover-card {
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             cursor: default;
@@ -42,37 +53,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
 </head>
 <body>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="dashboard.php" class="nav-link active"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            
-            <div class="nav-section-title">Master Data</div>
-            <a href="supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-
-            <div class="nav-section-title">Inventory</div>
-            <a href="bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-
-            <div class="nav-section-title">Transaksi</div>
-            <a href="pembelian/index.php" class="nav-link"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            
-            <div class="nav-section-title">Reports</div>
-            <a href="laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    <?php include '../includes/sidebar.php'; ?>
 
     <div class="main-content">
         
@@ -85,7 +66,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                 <div class="page-title">
                     <h5 class="fw-bold mb-0 text-dark">Dashboard</h5>
                     <small class="text-muted d-none d-sm-block" style="font-size: 11px;">
-                        Overview Statistik Harian
+                        Selamat Datang, <?php echo $_SESSION['nama_lengkap']; ?>!
                     </small>
                 </div>
             </div>
@@ -104,8 +85,9 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                         <?php echo strtoupper(substr($_SESSION['nama_lengkap'], 0, 2)); ?>
                     </div>
                 </div>
+                
                 <div class="dropdown-menu-custom">
-                    <a href="logout.php" class="dropdown-item-custom logout text-danger">
+                    <a href="logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout">
                         <i class="bi bi-power"></i> Logout
                     </a>
                 </div>
@@ -142,6 +124,7 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                     </div>
                 </div>
 
+                <?php if ($role == 'owner'): ?>
                 <div class="col-6 col-xl-3">
                     <div class="p-3 bg-white rounded-4 shadow-sm h-100 border border-light position-relative overflow-hidden hover-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -169,7 +152,8 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
                         </div>
                     </div>
                 </div>
-            </div>
+                <?php endif; ?>
+                </div>
 
             <div class="row g-4">
                 <div class="col-lg-6">
@@ -215,23 +199,33 @@ $result_detail_produk = $conn->query("SELECT * FROM produk WHERE stok < 10 ORDER
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // LOGIKA TOGGLE SIDEBAR (MOBILE ONLY)
-        const btnMobile = document.getElementById('btnMobileToggle');
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
+        // ... script toggle sidebar (jika ada) ...
 
-        if(btnMobile) {
-            btnMobile.addEventListener('click', () => {
-                sidebar.classList.add('show');
-                overlay.classList.add('show');
-            });
-        }
-        if(overlay) {
-            overlay.addEventListener('click', () => {
-                sidebar.classList.remove('show');
-                overlay.classList.remove('show');
+        // Script SweetAlert Logout
+        const btnLogout = document.getElementById('btnLogout');
+        if(btnLogout) {
+            btnLogout.addEventListener('click', function(e) {
+                e.preventDefault(); // Mencegah link langsung jalan
+                const href = this.getAttribute('href'); // Ambil alamat logout
+
+                Swal.fire({
+                    title: 'Yakin ingin keluar?',
+                    text: "Sesi Anda akan berakhir.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Ya, Keluar!',
+                    cancelButtonText: 'Batal',
+                    reverseButtons: true
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = href; // Redirect manual jika user klik Ya
+                    }
+                });
             });
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </body>
 </html>
