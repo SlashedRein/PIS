@@ -9,11 +9,10 @@ if (!isset($_SESSION['user_id'])) {
 
 $success = '';
 $error = '';
-$role = $_SESSION['role']; // Simpan role untuk pengecekan
+$role = $_SESSION['role']; // Simpan role
 
 // --- 1. LOGIKA DELETE (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
-    // Proteksi Backend
     if ($role !== 'owner') {
         echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
         exit();
@@ -70,30 +69,34 @@ if (isset($_POST['create_bahan'])) {
     }
 }
 
-// --- 3. LOGIKA UPDATE (HANYA OWNER) ---
+// --- 3. LOGIKA UPDATE (STOK BISA SEMUA, SISANYA OWNER) ---
 if (isset($_POST['update_bahan'])) {
-    if ($role !== 'owner') {
-        $error = "Anda tidak berhak mengubah data.";
-    } else {
-        $id_bahan   = clean_input($_POST['id_bahan']);
+    $id_bahan = clean_input($_POST['id_bahan']);
+    $stok     = clean_input($_POST['stok']); // Semua bisa edit stok (opname)
+
+    // Ambil data lama untuk keamanan
+    $old_data = $conn->query("SELECT * FROM bahan_baku WHERE id_bahan = $id_bahan")->fetch_assoc();
+
+    if ($role == 'owner') {
+        // Owner bisa ubah semua
         $nama_bahan = clean_input($_POST['nama_bahan']);
         $satuan     = clean_input($_POST['satuan']);
-        $stok       = clean_input($_POST['stok']);
         $stok_min   = clean_input($_POST['stok_min']);
+    } else {
+        // Karyawan dipaksa pakai data lama untuk info sensitif
+        $nama_bahan = $old_data['nama_bahan'];
+        $satuan     = $old_data['satuan'];
+        $stok_min   = $old_data['stok_min'];
+    }
 
-        if (empty($nama_bahan)) {
-            $error = "Nama bahan wajib diisi!";
-        } else {
-            $stmt = $conn->prepare("UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?");
-            $stmt->bind_param("ssiii", $nama_bahan, $satuan, $stok, $stok_min, $id_bahan);
-            
-            if ($stmt->execute()) {
-                $success = "Data bahan baku berhasil diperbarui!";
-                header("refresh:1;url=index.php");
-            } else {
-                $error = "Gagal update: " . $conn->error;
-            }
-        }
+    $stmt = $conn->prepare("UPDATE bahan_baku SET nama_bahan=?, satuan=?, stok=?, stok_min=? WHERE id_bahan=?");
+    $stmt->bind_param("ssiii", $nama_bahan, $satuan, $stok, $stok_min, $id_bahan);
+    
+    if ($stmt->execute()) {
+        $success = "Data bahan baku berhasil diperbarui!";
+        header("refresh:1;url=index.php");
+    } else {
+        $error = "Gagal update: " . $conn->error;
     }
 }
 
@@ -207,23 +210,21 @@ $result = $conn->query($query);
                                     <td class="px-3 text-muted"><?php echo $row['stok_min']; ?></td>
                                     <td class="px-3"><?php echo $status; ?></td>
                                     <td class="px-3 text-end">
-                                        <?php if ($role == 'owner'): ?>
-                                            <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1" 
-                                                    data-bs-toggle="modal" 
-                                                    data-bs-target="#editModal"
-                                                    data-id="<?php echo $row['id_bahan']; ?>"
-                                                    data-nama="<?php echo $row['nama_bahan']; ?>"
-                                                    data-satuan="<?php echo $row['satuan']; ?>"
-                                                    data-stok="<?php echo $row['stok']; ?>"
-                                                    data-min="<?php echo $row['stok_min']; ?>">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
+                                        <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editModal"
+                                                data-id="<?php echo $row['id_bahan']; ?>"
+                                                data-nama="<?php echo $row['nama_bahan']; ?>"
+                                                data-satuan="<?php echo $row['satuan']; ?>"
+                                                data-stok="<?php echo $row['stok']; ?>"
+                                                data-min="<?php echo $row['stok_min']; ?>">
+                                            <i class="bi bi-pencil"></i> <?php echo ($role == 'owner') ? 'Edit' : 'Update Stok'; ?>
+                                        </button>
 
-                                            <a href="?delete=<?php echo $row['id_bahan']; ?>" class="btn btn-sm btn-danger rounded-2" onclick="return confirm('Yakin ingin menghapus?')">
-                                                <i class="bi bi-trash"></i>
-                                            </a>
-                                        <?php else: ?>
-                                            <span class="badge bg-light text-muted border">Read Only</span>
+                                        <?php if ($role == 'owner'): ?>
+                                        <a href="?delete=<?php echo $row['id_bahan']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Yakin ingin menghapus?')">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -260,46 +261,79 @@ $result = $conn->query($query);
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <div class="modal fade" id="editModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Edit Bahan Baku</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold"><?php echo ($role == 'owner') ? 'Edit Bahan Baku' : 'Koreksi Stok Bahan'; ?></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
                 <form method="POST">
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_bahan" id="edit_id">
-                        <div class="mb-3"><label class="form-label small fw-bold">Nama Bahan</label><input type="text" class="form-control rounded-3" name="nama_bahan" id="edit_nama" required></div>
-                        <div class="mb-3"><label class="form-label small fw-bold">Satuan</label>
-                            <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
-                                <option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="liter">Liter (L)</option><option value="ml">Mililiter (ml)</option><option value="pcs">Pieces (pcs)</option><option value="pack">Pack</option><option value="butir">Butir</option>
-                            </select>
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Nama Bahan</label>
+                            <input type="text" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
+                                   name="nama_bahan" id="edit_nama" 
+                                   <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
                         </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Satuan</label>
+                            <?php if ($role == 'owner'): ?>
+                                <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
+                                    <option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="liter">Liter (L)</option><option value="ml">Mililiter (ml)</option><option value="pcs">Pieces (pcs)</option><option value="pack">Pack</option><option value="butir">Butir</option>
+                                </select>
+                            <?php else: ?>
+                                <input type="text" class="form-control rounded-3 bg-light" name="satuan" id="edit_satuan_text" readonly>
+                            <?php endif; ?>
+                        </div>
+
                         <div class="row g-3">
-                            <div class="col-6"><label class="form-label small fw-bold">Stok Saat Ini</label><input type="number" class="form-control rounded-3" name="stok" id="edit_stok"></div>
-                            <div class="col-6"><label class="form-label small fw-bold text-danger">Min. Stok</label><input type="number" class="form-control rounded-3" name="stok_min" id="edit_min"></div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold text-success">Stok Saat Ini</label>
+                                <input type="number" class="form-control rounded-3 border-success" name="stok" id="edit_stok" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold text-danger">Min. Stok</label>
+                                <input type="number" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
+                                       name="stok_min" id="edit_min" 
+                                       <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
+                            </div>
                         </div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="update_bahan" class="btn btn-brown rounded-3 px-4">Update</button></div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
+                        <button type="submit" name="update_bahan" class="btn btn-brown rounded-3 px-4">Simpan Perubahan</button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
-    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <script>
-        // Modal Edit Script (Cek exists dulu, krn modal bisa gak dirender)
+        // Modal Edit Script
         const editModal = document.getElementById('editModal');
         if(editModal) {
             editModal.addEventListener('show.bs.modal', event => {
                 const button = event.relatedTarget;
                 document.getElementById('edit_id').value = button.getAttribute('data-id');
                 document.getElementById('edit_nama').value = button.getAttribute('data-nama');
-                document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
                 document.getElementById('edit_stok').value = button.getAttribute('data-stok');
                 document.getElementById('edit_min').value = button.getAttribute('data-min');
+
+                // Handle Dropdown vs Text
+                const role = "<?php echo $role; ?>";
+                if(role === 'owner') {
+                    document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
+                } else {
+                    document.getElementById('edit_satuan_text').value = button.getAttribute('data-satuan');
+                }
             });
         }
 
