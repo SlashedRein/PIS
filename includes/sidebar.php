@@ -57,12 +57,10 @@ $parent_folder = basename(dirname($_SERVER['PHP_SELF']));
             <i class="bi bi-grid"></i> <span>Produk</span>
         </a>
         
-        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'owner'): ?>
-            <a href="<?php echo $base_url; ?>/pages/resep/index.php" 
-               class="nav-link <?php echo ($parent_folder == 'resep') ? 'active' : ''; ?>">
-                <i class="bi bi-journal-text"></i> <span>Resep</span>
-            </a>
-        <?php endif; ?>
+        <a href="<?php echo $base_url; ?>/pages/resep/index.php" 
+           class="nav-link <?php echo ($parent_folder == 'resep') ? 'active' : ''; ?>">
+            <i class="bi bi-journal-text"></i> <span>Resep</span>
+        </a>
 
         <div class="nav-section-title">Transaksi</div>
         

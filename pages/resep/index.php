@@ -8,59 +8,64 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// 2. PROTEKSI HAK AKSES (HANYA OWNER)
-// Jika role bukan 'owner', tolak akses & kembalikan ke dashboard
-if ($_SESSION['role'] !== 'owner') {
-    echo "<script>
-            alert('Akses Ditolak! Halaman Resep hanya untuk Owner.');
-            window.location.href = '../dashboard.php';
-          </script>";
-    exit();
-}
+// SIMPAN ROLE (Tidak ada blokir akses, semua boleh masuk)
+$role = $_SESSION['role']; 
 
 $success = '';
 $error = '';
 
-// --- 1. LOGIKA HAPUS ---
+// --- 1. LOGIKA HAPUS (HANYA OWNER) ---
 if (isset($_GET['delete_item'])) {
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
     $id = clean_input($_GET['delete_item']);
     $conn->query("DELETE FROM resep WHERE id_resep = $id");
     header("Location: index.php");
 }
 if (isset($_GET['delete_product_resep'])) {
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+        exit();
+    }
     $id = clean_input($_GET['delete_product_resep']);
     $conn->query("DELETE FROM resep WHERE id_produk = $id");
     header("Location: index.php");
 }
 
-// --- 2. LOGIKA SIMPAN RESEP ---
+// --- 2. LOGIKA SIMPAN RESEP (HANYA OWNER) ---
 if (isset($_POST['save_resep'])) {
-    $id_produk = clean_input($_POST['id_produk']);
-    $bahans    = $_POST['id_bahan'];
-    $takarans  = $_POST['takaran'];
-    $satuans   = $_POST['satuan'];
-    
-    if (empty($id_produk) || empty($bahans)) {
-        $error = "Produk dan bahan tidak boleh kosong!";
+    if ($role !== 'owner') {
+        $error = "Anda tidak berhak mengubah resep.";
     } else {
-        $stmt = $conn->prepare("INSERT INTO resep (id_produk, id_bahan, takaran, satuan) VALUES (?, ?, ?, ?)");
-        $count = 0;
-        for ($i = 0; $i < count($bahans); $i++) {
-            if (!empty($bahans[$i]) && !empty($takarans[$i])) {
-                // Cek duplikat bahan di produk yang sama
-                $check = $conn->query("SELECT id_resep FROM resep WHERE id_produk = $id_produk AND id_bahan = " . $bahans[$i]);
-                if ($check->num_rows == 0) {
-                    $stmt->bind_param("iids", $id_produk, $bahans[$i], $takarans[$i], $satuans[$i]);
-                    $stmt->execute();
-                    $count++;
+        $id_produk = clean_input($_POST['id_produk']);
+        $bahans    = $_POST['id_bahan'];
+        $takarans  = $_POST['takaran'];
+        $satuans   = $_POST['satuan'];
+        
+        if (empty($id_produk) || empty($bahans)) {
+            $error = "Produk dan bahan tidak boleh kosong!";
+        } else {
+            $stmt = $conn->prepare("INSERT INTO resep (id_produk, id_bahan, takaran, satuan) VALUES (?, ?, ?, ?)");
+            $count = 0;
+            for ($i = 0; $i < count($bahans); $i++) {
+                if (!empty($bahans[$i]) && !empty($takarans[$i])) {
+                    // Cek duplikat bahan di produk yang sama
+                    $check = $conn->query("SELECT id_resep FROM resep WHERE id_produk = $id_produk AND id_bahan = " . $bahans[$i]);
+                    if ($check->num_rows == 0) {
+                        $stmt->bind_param("iids", $id_produk, $bahans[$i], $takarans[$i], $satuans[$i]);
+                        $stmt->execute();
+                        $count++;
+                    }
                 }
             }
-        }
-        if ($count > 0) {
-            $success = "Berhasil menyimpan resep!";
-            header("refresh:1;url=index.php");
-        } else {
-            $error = "Gagal: Bahan mungkin sudah ada di resep ini.";
+            if ($count > 0) {
+                $success = "Berhasil menyimpan resep!";
+                header("refresh:1;url=index.php");
+            } else {
+                $error = "Gagal: Bahan mungkin sudah ada di resep ini.";
+            }
         }
     }
 }
@@ -88,8 +93,6 @@ foreach ($resep_group as $pid => $data) {
     foreach ($data['items'] as $item) {
         $butuh = $item['takaran'];
         $punya = $item['stok_gudang'];
-        // Note: Idealnya ada konversi satuan di sini (misal kg ke gram)
-        // Untuk sederhana, kita asumsikan satuan sama atau dihandle user
         $bisa_buat = ($butuh > 0) ? floor($punya / $butuh) : 0;
         if ($bisa_buat < $max_production) $max_production = $bisa_buat;
     }
@@ -124,35 +127,17 @@ foreach ($resep_group as $pid => $data) {
     <link rel="stylesheet" href="../../assets/css/custom.css">
 
     <style>
-        /* Card Style */
         .resep-card { 
             border-left: 5px solid var(--primary-color); 
             transition: transform 0.2s; 
-            background: #fff;
-            border-radius: 12px;
+            background: #fff; border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
         .resep-card:hover { transform: translateY(-5px); }
-        
         .ingredient-item { 
             display: flex; justify-content: space-between; 
             padding: 8px 0; border-bottom: 1px dashed #eee; font-size: 0.9rem;
         }
-        
-        /* Modal Repeater */
-        .repeater-item { 
-            background: #f8f9fa; border: 1px solid #eee; 
-            padding: 15px; border-radius: 10px; margin-bottom: 10px; 
-            position: relative; animation: fadeIn 0.3s; 
-        }
-        .btn-remove-row { 
-            position: absolute; top: -10px; right: -10px; 
-            width: 25px; height: 25px; border-radius: 50%; padding: 0; 
-            display: flex; align-items: center; justify-content: center; 
-        }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Badge Estimasi */
         .estimasi-box {
             background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
             border-radius: 8px; padding: 10px; margin-top: 15px;
@@ -160,10 +145,8 @@ foreach ($resep_group as $pid => $data) {
         }
         .estimasi-number { font-size: 1.2rem; font-weight: 800; color: #BF360C; }
         .estimasi-label { font-size: 0.75rem; color: #8D6E63; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
-        
-        .btn-brown { background-color: var(--primary-color); color: white; }
-        .btn-brown:hover { background-color: #6F3410; color: white; }
         .text-brown { color: var(--primary-color) !important; }
+        .btn-brown { background-color: var(--primary-color); color: white; }
     </style>
 </head>
 <body>
@@ -208,9 +191,12 @@ foreach ($resep_group as $pid => $data) {
                     <h5 class="fw-bold text-brown m-0">Katalog Resep</h5>
                     <p class="text-muted small mb-0">Lihat resep dan potensi stok jadi berdasarkan gudang</p>
                 </div>
+                
+                <?php if ($role == 'owner'): ?>
                 <button type="button" class="btn btn-brown rounded-3 px-4" data-bs-toggle="modal" data-bs-target="#addResepModal">
                     <i class="bi bi-plus-lg me-2"></i> Buat / Edit Resep
                 </button>
+                <?php endif; ?>
             </div>
 
             <div class="row g-4">
@@ -225,7 +211,10 @@ foreach ($resep_group as $pid => $data) {
                             <div class="content-box resep-card h-100 d-flex flex-column p-4">
                                 <div class="d-flex justify-content-between align-items-start mb-3 border-bottom pb-2">
                                     <h5 class="fw-bold text-dark m-0"><i class="bi bi-cookie text-warning me-2"></i><?php echo $group['nama_produk']; ?></h5>
+                                    
+                                    <?php if ($role == 'owner'): ?>
                                     <a href="?delete_product_resep=<?php echo $id_prod; ?>" class="text-danger" onclick="return confirm('Hapus SEMUA resep produk ini?')"><i class="bi bi-trash"></i></a>
+                                    <?php endif; ?>
                                 </div>
                                 
                                 <ul class="list-unstyled flex-grow-1 mb-0">
@@ -234,7 +223,9 @@ foreach ($resep_group as $pid => $data) {
                                             <span><?php echo $item['nama_bahan']; ?></span>
                                             <div class="d-flex align-items-center">
                                                 <strong class="text-brown me-2"><?php echo $item['takaran'] . ' ' . $item['satuan']; ?></strong>
+                                                <?php if ($role == 'owner'): ?>
                                                 <a href="?delete_item=<?php echo $item['id_resep']; ?>" class="text-muted small" onclick="return confirm('Hapus bahan ini dari resep?')"><i class="bi bi-x-circle"></i></a>
+                                                <?php endif; ?>
                                             </div>
                                         </li>
                                     <?php endforeach; ?>
@@ -255,29 +246,23 @@ foreach ($resep_group as $pid => $data) {
         </div>
     </div>
 
+    <?php if ($role == 'owner'): ?>
     <div class="modal fade" id="addResepModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0">
-                    <h5 class="modal-title fw-bold">Konfigurasi Resep</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header border-bottom-0"><h5 class="modal-title fw-bold">Konfigurasi Resep</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <form method="POST" action="">
                     <div class="modal-body p-4 pt-0">
-                        
                         <div class="row mb-3 g-3">
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Untuk Produk:</label>
                                 <select class="form-select rounded-3" name="id_produk" id="selectProduk" required>
                                     <option value="">-- Pilih Produk --</option>
-                                    <?php 
-                                    $produk_list->data_seek(0);
-                                    while($p = $produk_list->fetch_assoc()): ?>
+                                    <?php $produk_list->data_seek(0); while($p = $produk_list->fetch_assoc()): ?>
                                         <option value="<?php echo $p['id_produk']; ?>"><?php echo $p['nama_produk']; ?></option>
                                     <?php endwhile; ?>
                                 </select>
                             </div>
-                            
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold text-primary"><i class="bi bi-files"></i> Salin Resep Dari:</label>
                                 <select class="form-select rounded-3 border-primary" id="copyFromSource" onchange="copyRecipe()">
@@ -288,24 +273,19 @@ foreach ($resep_group as $pid => $data) {
                                 </select>
                             </div>
                         </div>
-
                         <hr class="opacity-25">
-
                         <label class="form-label fw-bold small mb-2">Komposisi Bahan</label>
-                        <div id="bahan-container">
-                            </div>
+                        <div id="bahan-container"></div>
                         <button type="button" class="btn btn-sm btn-outline-secondary w-100 mt-2 dashed-border" onclick="addIngredientRow()">
                             <i class="bi bi-plus-circle"></i> Tambah Baris Bahan
                         </button>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="save_resep" class="btn btn-brown rounded-3 px-4">Simpan Resep</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="save_resep" class="btn btn-brown rounded-3 px-4">Simpan Resep</button></div>
                 </form>
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -315,8 +295,6 @@ foreach ($resep_group as $pid => $data) {
         const bahanData = <?php echo json_encode($bahan_options_js); ?>;
         const existingRecipes = <?php echo json_encode($existing_recipes_js); ?>;
         
-        // SCRIPT TOGGLE SIDEBAR DIHAPUS (Sudah include)
-
         // SweetAlert Logout
         document.getElementById('btnLogout').addEventListener('click', function(e) {
             e.preventDefault(); 
@@ -328,8 +306,11 @@ foreach ($resep_group as $pid => $data) {
             }).then((result) => { if (result.isConfirmed) window.location.href = href; });
         });
 
-        // Add Row Function
+        // Add Row Function (Hanya jalan jika modal ada/Owner)
         function addIngredientRow(selectedId = '', selectedTakaran = '', selectedSatuan = 'gram') {
+            const container = document.getElementById('bahan-container');
+            if(!container) return; // Karyawan tidak punya container ini
+
             let optionsHtml = '<option value="">-- Bahan --</option>';
             bahanData.forEach(b => { 
                 let sel = (b.id_bahan == selectedId) ? 'selected' : '';
@@ -358,31 +339,22 @@ foreach ($resep_group as $pid => $data) {
                         </select>
                     </div>
                 </div>`;
-            document.getElementById('bahan-container').appendChild(div);
+            container.appendChild(div);
         }
 
-        // Copy Recipe Logic
         function copyRecipe() {
             const sourceId = document.getElementById('copyFromSource').value;
             const container = document.getElementById('bahan-container');
-            
             if(sourceId && existingRecipes[sourceId]) {
                 container.innerHTML = '';
                 const items = existingRecipes[sourceId];
-                if(items.length > 0) {
-                    items.forEach(item => { addIngredientRow(item.id_bahan, item.takaran, item.satuan); });
-                } else {
-                    addIngredientRow();
-                }
-            } else {
-                container.innerHTML = '';
-                addIngredientRow();
-            }
+                if(items.length > 0) items.forEach(item => { addIngredientRow(item.id_bahan, item.takaran, item.satuan); });
+                else addIngredientRow();
+            } else { container.innerHTML = ''; addIngredientRow(); }
         }
 
-        // Init Row
         document.addEventListener('DOMContentLoaded', function() {
-            addIngredientRow();
+            if(document.getElementById('bahan-container')) addIngredientRow();
         });
     </script>
 </body>
