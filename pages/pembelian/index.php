@@ -222,9 +222,12 @@ $result = $conn->query($query);
                                         </button>
                                         
                                         <?php if ($role == 'owner'): ?>
-                                        <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                            <a href="edit.php?id=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-warning text-white shadow-sm" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
                                         <?php endif; ?>
                                     </td>
                                 </tr>

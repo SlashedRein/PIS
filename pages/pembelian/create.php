@@ -41,9 +41,10 @@ if (isset($_POST['simpan_pembelian'])) {
     $id_supp = clean_input($_POST['id_supp']);
     $tgl     = clean_input($_POST['tgl_pembelian']);
     $note    = clean_input($_POST['catatan']);
-    $bahan_ids = $_POST['id_bahan']; 
-    $qtys      = $_POST['jumlah'];
-    $hargas    = $_POST['harga_satuan']; // Input Manual untuk Pembelian
+    
+    $bahan_ids = isset($_POST['id_bahan']) ? $_POST['id_bahan'] : []; 
+    $qtys      = isset($_POST['jumlah']) ? $_POST['jumlah'] : [];
+    $hargas    = isset($_POST['harga_satuan']) ? $_POST['harga_satuan'] : [];
     
     if (empty($id_supp) || empty($bahan_ids)) {
         $error = "Data supplier dan bahan tidak boleh kosong!";
@@ -56,7 +57,11 @@ if (isset($_POST['simpan_pembelian'])) {
             for ($i = 0; $i < count($bahan_ids); $i++) {
                 $pid = $bahan_ids[$i];
                 $qty = $qtys[$i];
-                $prc = str_replace('.', '', $hargas[$i]); // Hapus titik format rupiah
+                
+                // PENTING: Hapus titik format rupiah sebelum simpan ke DB
+                // Contoh: "15.000" jadi "15000"
+                $raw_harga = $hargas[$i];
+                $prc = (float) str_replace('.', '', $raw_harga); 
 
                 if(!empty($pid) && $qty > 0) {
                     $sub = $prc * $qty;
@@ -65,22 +70,27 @@ if (isset($_POST['simpan_pembelian'])) {
                 }
             }
 
-            if (empty($items_fix)) throw new Exception("Belum ada item dipilih.");
+            if (empty($items_fix)) throw new Exception("Belum ada item valid yang dipilih.");
 
-            // Insert Header
+            // 1. Insert Header Pembelian
             $stmt = $conn->prepare("INSERT INTO pembelian (id_supp, tgl, total_beli, note) VALUES (?, ?, ?, ?)");
             $stmt->bind_param("isds", $id_supp, $tgl, $grand_total, $note);
-            $stmt->execute();
+            
+            if (!$stmt->execute()) {
+                throw new Exception("Gagal menyimpan header transaksi: " . $stmt->error);
+            }
             $id_beli = $conn->insert_id;
 
-            // Insert Detail & UPDATE STOK (BERTAMBAH)
+            // 2. Insert Detail & UPDATE STOK
             $stmt_detail = $conn->prepare("INSERT INTO detail_pembelian (id_beli, id_bahan, jumlah, harga_satuan, sub_total) VALUES (?, ?, ?, ?, ?)");
             $stmt_stok = $conn->prepare("UPDATE bahan_baku SET stok = stok + ? WHERE id_bahan = ?");
 
             foreach ($items_fix as $item) {
                 // Masuk Detail
                 $stmt_detail->bind_param("iiidd", $id_beli, $item['id'], $item['qty'], $item['harga'], $item['sub']);
-                $stmt_detail->execute();
+                if (!$stmt_detail->execute()) {
+                    throw new Exception("Gagal menyimpan detail item: " . $stmt_detail->error);
+                }
 
                 // Tambah Stok
                 $stmt_stok->bind_param("ii", $item['qty'], $item['id']);
@@ -88,17 +98,19 @@ if (isset($_POST['simpan_pembelian'])) {
             }
 
             $conn->commit();
+            
+            // Redirect Sukses
             header("Location: index.php?new_buy=" . $id_beli);
             exit();
 
         } catch (Exception $e) {
             $conn->rollback();
-            $error = $e->getMessage();
+            $error = "Terjadi Kesalahan: " . $e->getMessage();
         }
     }
 }
 
-// Ambil Data Awal
+// Ambil Data Awal untuk Dropdown
 $suppliers = $conn->query("SELECT * FROM supplier ORDER BY nama ASC");
 $bahans = $conn->query("SELECT * FROM bahan_baku ORDER BY nama_bahan ASC");
 $js_bahans = [];
@@ -116,6 +128,8 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../assets/css/custom.css">
     
@@ -126,32 +140,8 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
     </style>
 </head>
 <body>
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header d-flex align-items-center justify-content-center gap-2">
-            <div class="logo-icon">🍪</div>
-            <div class="logo-text text-start">
-                <h5 class="mb-0 fw-bold" style="font-size: 16px;">Dewi Cookies</h5>
-            </div>
-        </div>
-        <div class="sidebar-nav mt-3">
-            <div class="nav-section-title">Main Menu</div>
-            <a href="../dashboard.php" class="nav-link"><i class="bi bi-speedometer2"></i> <span>Dashboard</span></a>
-            <div class="nav-section-title">Master Data</div>
-            <a href="../supplier/index.php" class="nav-link"><i class="bi bi-building"></i> <span>Supplier</span></a>
-            <a href="../customer/index.php" class="nav-link"><i class="bi bi-people"></i> <span>Customer</span></a>
-            <div class="nav-section-title">Inventory</div>
-            <a href="../bahan-baku/index.php" class="nav-link"><i class="bi bi-box-seam"></i> <span>Bahan Baku</span></a>
-            <a href="../produk/index.php" class="nav-link"><i class="bi bi-grid"></i> <span>Produk</span></a>
-            <a href="../resep/index.php" class="nav-link"><i class="bi bi-journal-text"></i> <span>Resep</span></a>
-            <div class="nav-section-title">Transaksi</div>
-            <a href="index.php" class="nav-link active"><i class="bi bi-cart-plus"></i> <span>Pembelian</span></a>
-            <a href="../penjualan/index.php" class="nav-link"><i class="bi bi-cash-coin"></i> <span>Penjualan</span></a>
-            <div class="nav-section-title">Reports</div>
-            <a href="../laporan/index.php" class="nav-link"><i class="bi bi-graph-up"></i> <span>Laporan</span></a>
-        </div>
-    </div>
+    
+    <?php include '../../includes/sidebar.php'; ?>
 
     <div class="main-content">
         <div class="topbar shadow-sm">
@@ -170,15 +160,19 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                     </div>
                 </div>
                 <div class="dropdown-menu-custom">
-                    <a href="../../logout.php" class="dropdown-item-custom logout text-danger"><i class="bi bi-power"></i> Logout</a>
+                    <a href="../logout.php" class="dropdown-item-custom logout text-danger" id="btnLogout"><i class="bi bi-power"></i> Logout</a>
                 </div>
             </div>
         </div>
 
         <div class="content-area p-4">
-            <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
+            <?php if ($error): ?>
+                <div class="alert alert-danger d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i> <?php echo $error; ?>
+                </div>
+            <?php endif; ?>
 
-            <form method="POST" action="">
+            <form id="formPembelian" method="POST" action="">
                 <div class="content-box mb-3">
                     <div class="row align-items-center g-2">
                         <div class="col-md-3">
@@ -241,7 +235,7 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
 
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <a href="index.php" class="btn btn-sm btn-light border px-3">Batal</a>
-                        <button type="submit" name="simpan_pembelian" class="btn btn-sm btn-primary px-3" onclick="return confirm('Simpan data pembelian?')">
+                        <button type="button" id="btnSimpan" class="btn btn-sm btn-primary px-3">
                             <i class="bi bi-save"></i> Simpan & Restok
                         </button>
                     </div>
@@ -281,19 +275,64 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
         const bahans = <?php echo json_encode($js_bahans); ?>;
 
         $(document).ready(function() {
+            // Init Select2 untuk Supplier
             $('#selectSupplier').select2({
                 theme: 'bootstrap-5',
                 placeholder: '-- Cari Supplier --',
                 width: '100%'
             });
+            // Tambah baris pertama
             addRow();
         });
 
+        // --- 1. EVENT DELEGATION UNTUK HITUNG OTOMATIS ---
+        // Ini kuncinya: Biar baris baru pun eventnya tetap jalan
+        
+        // Format Rupiah saat mengetik harga
+        $(document).on('keyup', '.price', function() {
+            let val = $(this).val().replace(/\D/g, ''); // Ambil angka saja
+            if (val === '') {
+                $(this).val('');
+            } else {
+                $(this).val(parseInt(val).toLocaleString('id-ID')); // Format ribuan
+            }
+            calcTotal(); // Hitung ulang
+        });
+
+        // Hitung ulang saat Qty berubah
+        $(document).on('input change', '.qty', function() {
+            calcTotal();
+        });
+
+        // --- 2. FUNGSI HITUNG TOTAL ---
+        function calcTotal() {
+            let total = 0;
+            $('#cartBody tr').each(function() {
+                const row = $(this);
+                
+                // Ambil Harga (Hapus titik dulu)
+                let priceRaw = row.find('.price').val() || '0';
+                let price = parseInt(priceRaw.replace(/\./g, '')) || 0;
+                
+                // Ambil Qty
+                let qty = parseInt(row.find('.qty').val()) || 0;
+                
+                // Hitung Subtotal
+                let sub = price * qty;
+                row.find('.sub').val(sub.toLocaleString('id-ID'));
+                
+                total += sub;
+            });
+            $('#grandTotal').text('Rp ' + total.toLocaleString('id-ID'));
+        }
+
+        // --- 3. FUNGSI TAMBAH BARIS ---
         function addRow() {
             let options = '<option value="">-- Cari Bahan --</option>';
             bahans.forEach(b => options += `<option value="${b.id_bahan}">${b.nama_bahan} (${b.satuan})</option>`);
@@ -305,14 +344,24 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                             ${options}
                         </select>
                     </td>
-                    <td><input type="text" name="harga_satuan[]" class="form-control form-control-sm text-end price" placeholder="0" onkeyup="calcTotal()"></td>
-                    <td><input type="number" name="jumlah[]" class="form-control form-control-sm text-center qty" min="1" value="1" onchange="calcTotal()" onkeyup="calcTotal()" required></td>
-                    <td><input type="text" class="form-control form-control-sm bg-light text-end sub" readonly placeholder="0"></td>
-                    <td class="text-center"><button type="button" class="btn btn-sm btn-danger py-0 px-2" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
+                    <td>
+                        <input type="text" name="harga_satuan[]" class="form-control form-control-sm text-end price" 
+                               placeholder="0"> </td>
+                    <td>
+                        <input type="number" name="jumlah[]" class="form-control form-control-sm text-center qty" 
+                               min="1" value="1" required>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm bg-light text-end sub" readonly placeholder="0">
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-danger py-0 px-2" onclick="removeRow(this)"><i class="bi bi-x"></i></button>
+                    </td>
                 </tr>
             `;
             $('#cartBody').append(tr);
 
+            // Init Select2 untuk baris baru saja
             $('.select2-bahan:last').select2({
                 theme: 'bootstrap-5',
                 placeholder: '-- Cari Bahan --',
@@ -321,35 +370,71 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
             });
         }
 
-        function calcTotal() {
-            let total = 0;
-            $('#cartBody tr').each(function() {
-                const row = $(this);
-                const priceStr = row.find('.price').val().replace(/\./g,'') || '0';
-                const p = parseInt(priceStr);
-                const q = parseInt(row.find('.qty').val() || 0);
-                const sub = p * q;
-                
-                row.find('.sub').val(sub.toLocaleString('id-ID'));
-                total += sub;
-            });
-            $('#grandTotal').text('Rp ' + total.toLocaleString('id-ID'));
-        }
-
         function removeRow(btn) {
-            $(btn).closest('tr').remove();
-            calcTotal();
+            if($('#cartBody tr').length > 1) {
+                $(btn).closest('tr').remove();
+                calcTotal();
+            } else {
+                const row = $(btn).closest('tr');
+                row.find('select').val(null).trigger('change');
+                row.find('input').val('');
+                row.find('.qty').val(1);
+                calcTotal();
+            }
         }
 
-        // Quick Add Supplier
+        // --- SWEETALERT KONFIRMASI SIMPAN ---
+        $('#btnSimpan').on('click', function(e) {
+            e.preventDefault();
+            
+            const supplier = $('#selectSupplier').val();
+            if (!supplier) {
+                Swal.fire('Error', 'Silakan pilih supplier dulu.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Simpan Pembelian?',
+                text: "Stok bahan baku akan bertambah otomatis.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#8B4513',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Ya, Simpan!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.getElementById('formPembelian');
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'simpan_pembelian';
+                    hiddenInput.value = '1';
+                    form.appendChild(hiddenInput);
+                    
+                    form.submit();
+                }
+            });
+        });
+
+        // --- SWEETALERT LOGOUT ---
+        document.getElementById('btnLogout').addEventListener('click', function(e) {
+            e.preventDefault(); 
+            const href = this.getAttribute('href');
+            Swal.fire({
+                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
+                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Keluar'
+            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
+        });
+
+        // --- QUICK ADD SUPPLIER ---
         $('#formAddSupplier').on('submit', function(e){
             e.preventDefault();
             const btn = $(this).find('button[type="submit"]');
             btn.prop('disabled', true).text('Menyimpan...');
 
             $.ajax({
-                url: '', 
-                type: 'POST',
+                url: '', type: 'POST',
                 data: {
                     ajax_add_supplier: true,
                     nama: $('#new_nama').val(),
@@ -362,16 +447,14 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                         $('#selectSupplier').append(newOption).trigger('change');
                         $('#addSupplierModal').modal('hide');
                         $('#formAddSupplier')[0].reset();
-                        alert('Supplier berhasil ditambahkan!');
-                    } else {
-                        alert(res.message);
-                    }
+                        Swal.fire('Sukses', 'Supplier berhasil ditambahkan!', 'success');
+                    } else { Swal.fire('Gagal', res.message, 'error'); }
                 },
-                error: function() { alert('Error sistem.'); },
+                error: function() { Swal.fire('Error', 'Terjadi kesalahan sistem.', 'error'); },
                 complete: function() { btn.prop('disabled', false).text('Simpan & Pilih'); }
             });
         });
-
+        
         // Toggle Sidebar
         const btnMobile = document.getElementById('btnMobileToggle');
         const sidebar = document.getElementById('sidebar');
