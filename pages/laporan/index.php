@@ -229,7 +229,6 @@ $res_tetap = $conn->query($query_tetap);
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-info text-white py-0 px-2" onclick="showDetail(<?php echo $row['id_penjualan']; ?>, '<?php echo $row['nama_cust']; ?>')"><i class="bi bi-eye"></i></button>
                                             <a href="../penjualan/nota.php?id=<?php echo $row['id_penjualan']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2"><i class="bi bi-printer"></i></a>
-                                            <button onclick="confirmDelete('../penjualan/index.php?delete=<?php echo $row['id_penjualan']; ?>')" class="btn btn-sm btn-outline-danger py-0 px-2"><i class="bi bi-trash"></i></button>
                                         </td>
                                     </tr>
                                     <?php endwhile; ?>

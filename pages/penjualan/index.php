@@ -42,11 +42,8 @@ if (isset($_POST['get_detail'])) {
 
 // --- [LOGIC 2] HAPUS TRANSAKSI (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
-    // Proteksi Backend
-    if ($role !== 'owner') {
-        echo "<script>alert('Akses Ditolak! Hanya Owner yang boleh menghapus transaksi.'); window.location='index.php';</script>";
-        exit();
-    }
+    // TIDAK ADA CEK ROLE DI SINI
+    $id = clean_input($_GET['delete']);
 
     $id = clean_input($_GET['delete']);
     // Ambil item untuk restore stok
@@ -186,10 +183,8 @@ $result = $conn->query($query);
                                         <a href="nota.php?id=<?php echo $row['id_penjualan']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-printer"></i></a>
                                         
                                         <a href="edit.php?id=<?php echo $row['id_penjualan']; ?>" class="btn btn-sm btn-warning text-white me-1" title="Edit"><i class="bi bi-pencil"></i></a>
-
-                                        <?php if ($role == 'owner'): ?>
                                         <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete('?delete=<?php echo $row['id_penjualan']; ?>')"><i class="bi bi-trash"></i></button>
-                                        <?php endif; ?>
+
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
