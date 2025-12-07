@@ -8,11 +8,11 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-$role = $_SESSION['role']; // Simpan role
-$success = ''; // INISIALISASI VARIABEL AGAR TIDAK ERROR
-$error = '';   // INISIALISASI VARIABEL AGAR TIDAK ERROR
+$role = $_SESSION['role']; 
+$success = ''; 
+$error = '';
 
-// --- [LOGIC 1] AJAX DETAIL NOTA (BISA SEMUA ROLE) ---
+// --- [LOGIC 1] AJAX DETAIL NOTA ---
 if (isset($_POST['get_detail'])) {
     $id = clean_input($_POST['id']);
     $query = "SELECT dp.*, p.nama_produk, p.satuan 
@@ -42,11 +42,12 @@ if (isset($_POST['get_detail'])) {
 
 // --- [LOGIC 2] HAPUS TRANSAKSI (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
-    // TIDAK ADA CEK ROLE DI SINI
-    $id = clean_input($_GET['delete']);
+    if ($role !== 'owner') {
+        echo "<script>alert('Akses Ditolak! Hanya Owner yang boleh menghapus.'); window.location='index.php';</script>";
+        exit();
+    }
 
     $id = clean_input($_GET['delete']);
-    // Ambil item untuk restore stok
     $items = $conn->query("SELECT id_produk, jumlah FROM detail_penjualan WHERE id_penjualan = '$id'");
     
     $conn->begin_transaction();
@@ -101,6 +102,18 @@ $result = $conn->query($query);
         .text-brown { color: var(--primary-color) !important; }
         .btn-brown { background-color: var(--primary-color); color: white; border: none; }
         .btn-brown:hover { background-color: #6F3410; color: white; }
+        
+        /* FIX LAYOUT TOMBOL DI HP */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap; /* Tombol turun ke bawah jika sempit */
+            gap: 4px;
+            justify-content: flex-end;
+        }
+        @media (max-width: 576px) {
+            .action-buttons { justify-content: flex-start; }
+            .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+        }
     </style>
 </head>
 <body>
@@ -134,7 +147,9 @@ $result = $conn->query($query);
             <?php if (isset($_GET['new_nota'])): ?>
                 <div class="alert alert-success d-flex justify-content-between align-items-center mb-4">
                     <span><i class="bi bi-check-circle-fill"></i> Transaksi Berhasil!</span>
-                    <a href="nota.php?id=<?php echo $_GET['new_nota']; ?>" target="_blank" class="btn btn-sm btn-brown"><i class="bi bi-printer"></i> Cetak Nota</a>
+                    <?php if ($role == 'owner'): ?>
+                    <a href="struk.php?id=<?php echo $_GET['new_nota']; ?>" target="_blank" class="btn btn-sm btn-brown"><i class="bi bi-printer"></i> Cetak Struk</a>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 
@@ -170,7 +185,14 @@ $result = $conn->query($query);
                         </thead>
                         <tbody>
                             <?php if ($result->num_rows > 0): ?>
-                                <?php while ($row = $result->fetch_assoc()): ?>
+                                <?php while ($row = $result->fetch_assoc()): 
+                                    // LOGIKA PRINT: Cek Nama Customer
+                                    $nama_cust = strtoupper($row['nama_customer'] ?? '');
+                                    $is_corporate = (strpos($nama_cust, 'PT') !== false || strpos($nama_cust, 'CV') !== false || strpos($nama_cust, 'UD') !== false);
+                                    $print_link = $is_corporate ? 'nota_besar.php' : 'struk.php';
+                                    $print_title = $is_corporate ? 'Cetak Invoice' : 'Cetak Struk';
+                                    $print_icon = $is_corporate ? 'bi-file-text' : 'bi-printer';
+                                ?>
                                 <tr>
                                     <td><span class="badge bg-secondary font-monospace">#<?php echo str_pad($row['id_penjualan'], 6, '0', STR_PAD_LEFT); ?></span></td>
                                     <td><?php echo format_tanggal($row['tgl_penjualan']); ?></td>
@@ -178,13 +200,27 @@ $result = $conn->query($query);
                                     <td><?php echo $row['jml_item']; ?> jenis</td>
                                     <td><strong class="text-success"><?php echo format_rupiah($row['total']); ?></strong></td>
                                     <td class="text-end">
-                                        <button class="btn btn-sm btn-info text-white me-1" onclick="showDetail(<?php echo $row['id_penjualan']; ?>, '<?php echo $row['nama_customer']; ?>')"><i class="bi bi-eye"></i></button>
-                                        
-                                        <a href="nota.php?id=<?php echo $row['id_penjualan']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-printer"></i></a>
-                                        
-                                        <a href="edit.php?id=<?php echo $row['id_penjualan']; ?>" class="btn btn-sm btn-warning text-white me-1" title="Edit"><i class="bi bi-pencil"></i></a>
-                                        <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete('?delete=<?php echo $row['id_penjualan']; ?>')"><i class="bi bi-trash"></i></button>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-info btn-sm text-white" onclick="showDetail(<?php echo $row['id_penjualan']; ?>, '<?php echo $row['nama_customer']; ?>')" title="Lihat Detail">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            
+                                            <?php if ($role == 'owner'): ?>
+                                            <a href="<?php echo $print_link; ?>?id=<?php echo $row['id_penjualan']; ?>" target="_blank" class="btn btn-secondary btn-sm" title="<?php echo $print_title; ?>">
+                                                <i class="bi <?php echo $print_icon; ?>"></i>
+                                            </a>
+                                            <?php endif; ?>
+                                            
+                                            <a href="edit.php?id=<?php echo $row['id_penjualan']; ?>" class="btn btn-warning btn-sm text-white" title="Edit Transaksi">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
 
+                                            <?php if ($role == 'owner'): ?>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="confirmDelete('?delete=<?php echo $row['id_penjualan']; ?>')" title="Hapus">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
@@ -215,8 +251,6 @@ $result = $conn->query($query);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // NOTE: Sidebar toggle sudah include
-
         function showDetail(id, name) {
             $('#detailName').text(name);
             $('#detailContent').html('<tr><td colspan="4" class="text-center py-3">Memuat...</td></tr>');
@@ -224,30 +258,13 @@ $result = $conn->query($query);
             $.post('', {get_detail: true, id: id}, function(res){ $('#detailContent').html(res); });
         }
 
-        // SWEETALERT LOGOUT
         document.getElementById('btnLogout').addEventListener('click', function(e) {
-            e.preventDefault(); 
-            const href = this.getAttribute('href');
-            Swal.fire({
-                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
-                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Keluar', cancelButtonText: 'Batal', reverseButtons: true
-            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
+            e.preventDefault(); const href = this.getAttribute('href');
+            Swal.fire({ title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'Ya, Keluar' }).then((result) => { if (result.isConfirmed) window.location.href = href; });
         });
 
-        // SWEETALERT DELETE (KHUSUS TRANSAKSI)
         function confirmDelete(url) {
-            Swal.fire({ 
-                title: 'Hapus Transaksi?', 
-                text: "Data hilang & stok produk akan dikembalikan.", 
-                icon: 'warning', 
-                showCancelButton: true, 
-                confirmButtonColor: '#d33', 
-                cancelButtonColor: '#3085d6', 
-                confirmButtonText: 'Ya, Hapus!', 
-                cancelButtonText: 'Batal', 
-                reverseButtons: true 
-            }).then((result) => { if (result.isConfirmed) window.location.href = url; });
+            Swal.fire({ title: 'Hapus Transaksi?', text: "Data hilang & stok produk akan dikembalikan.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) window.location.href = url; });
         }
     </script>
 </body>

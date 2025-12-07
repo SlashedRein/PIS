@@ -10,35 +10,33 @@ if (!isset($_SESSION['user_id'])) {
 
 $success = '';
 $error = '';
-$role = $_SESSION['role']; // Simpan role
+$role = $_SESSION['role']; 
+$swal_script = '';
 
 // --- 1. LOGIKA DELETE (HANYA OWNER) ---
 if (isset($_GET['delete'])) {
     if ($role !== 'owner') {
-        echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
-        exit();
-    }
-    
-    $id = clean_input($_GET['delete']);
-    
-    // Cek relasi data (Resep & Penjualan)
-    $check_resep = $conn->query("SELECT COUNT(*) as count FROM resep WHERE id_produk = $id")->fetch_assoc();
-    $check_jual  = $conn->query("SELECT COUNT(*) as count FROM detail_penjualan WHERE id_produk = $id")->fetch_assoc();
-    
-    if ($check_resep['count'] > 0) {
-        $error = "Gagal: Produk tidak bisa dihapus karena digunakan dalam Resep!";
-    } elseif ($check_jual['count'] > 0) {
-        $error = "Gagal: Produk tidak bisa dihapus karena ada riwayat penjualan!";
+        $swal_script = "Swal.fire('Akses Ditolak', 'Hanya Owner yang boleh menghapus data.', 'error');";
     } else {
-        $delete_query = "DELETE FROM produk WHERE id_produk = ?";
-        $stmt = $conn->prepare($delete_query);
-        $stmt->bind_param("i", $id);
+        $id = clean_input($_GET['delete']);
         
-        if ($stmt->execute()) {
-            $success = "Data produk berhasil dihapus!";
-            header("refresh:1;url=index.php");
+        // Cek Relasi
+        $check_resep = $conn->query("SELECT COUNT(*) as count FROM resep WHERE id_produk = '$id'")->fetch_assoc();
+        $check_jual  = $conn->query("SELECT COUNT(*) as count FROM detail_penjualan WHERE id_produk = '$id'")->fetch_assoc();
+        
+        if ($check_resep['count'] > 0) {
+            $swal_script = "Swal.fire('Gagal', 'Produk ini digunakan dalam Resep. Hapus resepnya dulu.', 'error');";
+        } elseif ($check_jual['count'] > 0) {
+            $swal_script = "Swal.fire('Gagal', 'Produk ini punya riwayat penjualan. Tidak bisa dihapus.', 'error');";
         } else {
-            $error = "Gagal menghapus data.";
+            $stmt = $conn->prepare("DELETE FROM produk WHERE id_produk = ?");
+            $stmt->bind_param("i", $id);
+            if ($stmt->execute()) {
+                header("Location: index.php?status=deleted");
+                exit();
+            } else {
+                $swal_script = "Swal.fire('Error', 'Gagal hapus: " . $conn->error . "', 'error');";
+            }
         }
     }
 }
@@ -46,7 +44,7 @@ if (isset($_GET['delete'])) {
 // --- 2. LOGIKA CREATE (HANYA OWNER) ---
 if (isset($_POST['create_produk'])) {
     if ($role !== 'owner') {
-        $error = "Anda tidak berhak menambah produk baru.";
+        $swal_script = "Swal.fire('Gagal', 'Anda tidak berhak menambah produk.', 'error');";
     } else {
         $nama   = clean_input($_POST['nama_produk']);
         $satuan = clean_input($_POST['satuan']);
@@ -54,17 +52,15 @@ if (isset($_POST['create_produk'])) {
         $stok   = clean_input($_POST['stok']);
 
         if (empty($nama)) {
-            $error = "Nama produk wajib diisi!";
+            $swal_script = "Swal.fire('Gagal', 'Nama produk wajib diisi!', 'warning');";
         } else {
-            $query = "INSERT INTO produk (nama_produk, satuan, harga_jual, stok) VALUES (?, ?, ?, ?)";
-            $stmt = $conn->prepare($query);
+            $stmt = $conn->prepare("INSERT INTO produk (nama_produk, satuan, harga_jual, stok) VALUES (?, ?, ?, ?)");
             $stmt->bind_param("ssii", $nama, $satuan, $harga, $stok);
-            
             if ($stmt->execute()) {
-                $success = "Produk berhasil ditambahkan!";
-                header("refresh:1;url=index.php");
+                header("Location: index.php?status=created");
+                exit();
             } else {
-                $error = "Gagal: " . $conn->error;
+                $swal_script = "Swal.fire('Error', 'Gagal simpan: " . $conn->error . "', 'error');";
             }
         }
     }
@@ -73,37 +69,52 @@ if (isset($_POST['create_produk'])) {
 // --- 3. LOGIKA UPDATE (BISA SEMUA, TAPI DIBATASI) ---
 if (isset($_POST['update_produk'])) {
     $id     = clean_input($_POST['id_produk']);
-    $stok   = clean_input($_POST['stok']); // Semua role boleh update stok
+    $stok   = clean_input($_POST['stok']); 
     
-    // Ambil data lama untuk keamanan (jika bukan owner)
-    $old_data = $conn->query("SELECT * FROM produk WHERE id_produk = $id")->fetch_assoc();
+    $old_data = $conn->query("SELECT * FROM produk WHERE id_produk = '$id'")->fetch_assoc();
 
     if ($role == 'owner') {
-        // Owner: Ambil data dari input form (Bisa ubah semua)
         $nama   = clean_input($_POST['nama_produk']);
         $satuan = clean_input($_POST['satuan']);
         $harga  = clean_input($_POST['harga_jual']);
     } else {
-        // Karyawan: Paksa pakai data lama untuk Nama & Harga (Cegah hack inspect element)
         $nama   = $old_data['nama_produk'];
         $satuan = $old_data['satuan'];
         $harga  = $old_data['harga_jual'];
     }
 
-    $query = "UPDATE produk SET nama_produk=?, satuan=?, harga_jual=?, stok=? WHERE id_produk=?";
-    $stmt = $conn->prepare($query);
+    $stmt = $conn->prepare("UPDATE produk SET nama_produk=?, satuan=?, harga_jual=?, stok=? WHERE id_produk=?");
     $stmt->bind_param("ssiii", $nama, $satuan, $harga, $stok, $id);
     
     if ($stmt->execute()) {
-        $success = "Data produk berhasil diperbarui!";
-        header("refresh:1;url=index.php");
+        header("Location: index.php?status=updated");
+        exit();
     } else {
-        $error = "Gagal update: " . $conn->error;
+        $swal_script = "Swal.fire('Error', 'Gagal update: " . $conn->error . "', 'error');";
     }
 }
 
-// Ambil Data Produk
-$query = "SELECT * FROM produk ORDER BY nama_produk ASC";
+// --- 4. CEK STATUS NOTIFIKASI ---
+if (isset($_GET['status'])) {
+    if ($_GET['status'] == 'deleted') $swal_script = "Swal.fire('Berhasil', 'Produk dihapus.', 'success');";
+    if ($_GET['status'] == 'created') $swal_script = "Swal.fire('Berhasil', 'Produk baru ditambahkan.', 'success');";
+    if ($_GET['status'] == 'updated') $swal_script = "Swal.fire('Berhasil', 'Data produk diperbarui.', 'success');";
+}
+
+// --- 5. PAGINATION & SEARCH LOGIC ---
+$limit = 10; // Jumlah data per halaman
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$start = ($page > 1) ? ($page * $limit) - $limit : 0;
+
+$q = isset($_GET['q']) ? clean_input($_GET['q']) : '';
+$where_sql = !empty($q) ? "WHERE nama_produk LIKE '%$q%'" : "";
+
+// Hitung Total Data
+$total_result = $conn->query("SELECT COUNT(*) as total FROM produk $where_sql")->fetch_assoc();
+$total_pages = ceil($total_result['total'] / $limit);
+
+// Ambil Data Limit
+$query = "SELECT * FROM produk $where_sql ORDER BY nama_produk ASC LIMIT $start, $limit";
 $result = $conn->query($query);
 ?>
 
@@ -128,6 +139,11 @@ $result = $conn->query($query);
         .badge-danger { background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
         .text-brown { color: var(--primary-color) !important; }
         .btn-brown { background-color: var(--primary-color); color: white; }
+        
+        /* Tombol Aksi Responsif */
+        .btn-action-group {
+            display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
@@ -164,9 +180,6 @@ $result = $conn->query($query);
 
         <div class="content-area p-4">
             
-            <?php if ($success): ?><div class="alert alert-success d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i> <?php echo $success; ?></div><?php endif; ?>
-            <?php if ($error): ?><div class="alert alert-danger d-flex align-items-center gap-2"><i class="bi bi-exclamation-triangle-fill"></i> <?php echo $error; ?></div><?php endif; ?>
-
             <div class="bg-white rounded-4 shadow-sm border border-light p-4">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
                     <div>
@@ -180,6 +193,17 @@ $result = $conn->query($query);
                     </button>
                     <?php endif; ?>
                 </div>
+
+                <form method="GET" class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="q" class="form-control border-start-0" placeholder="Cari nama produk..." value="<?php echo htmlspecialchars($q); ?>">
+                        <button type="submit" class="btn btn-secondary">Cari</button>
+                        <?php if(!empty($q)): ?>
+                            <a href="index.php" class="btn btn-outline-secondary" title="Reset"><i class="bi bi-x-lg"></i></a>
+                        <?php endif; ?>
+                    </div>
+                </form>
 
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
@@ -196,17 +220,12 @@ $result = $conn->query($query);
                         </thead>
                         <tbody>
                             <?php 
-                            $no = 1;
+                            $no = $start + 1;
                             if ($result->num_rows > 0):
                                 while ($row = $result->fetch_assoc()): 
-                                    // Logic Status
-                                    if ($row['stok'] == 0) {
-                                        $status = '<span class="badge-status badge-danger">Habis</span>';
-                                    } elseif ($row['stok'] < 10) {
-                                        $status = '<span class="badge-status badge-warning">Menipis</span>';
-                                    } else {
-                                        $status = '<span class="badge-status badge-aman">Aman</span>';
-                                    }
+                                    if ($row['stok'] == 0) $status = '<span class="badge-status badge-danger">Habis</span>';
+                                    elseif ($row['stok'] < 10) $status = '<span class="badge-status badge-warning">Menipis</span>';
+                                    else $status = '<span class="badge-status badge-aman">Aman</span>';
                             ?>
                                 <tr>
                                     <td class="px-3"><?php echo $no++; ?></td>
@@ -216,32 +235,55 @@ $result = $conn->query($query);
                                     <td class="px-3 fw-bold bg-light text-center border"><?php echo $row['stok']; ?></td>
                                     <td class="px-3"><?php echo $status; ?></td>
                                     <td class="px-3 text-end">
-                                        <button type="button" class="btn btn-sm btn-warning text-white rounded-2 me-1 btn-action" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#editModal"
-                                                data-id="<?php echo $row['id_produk']; ?>"
-                                                data-nama="<?php echo $row['nama_produk']; ?>"
-                                                data-satuan="<?php echo $row['satuan']; ?>"
-                                                data-harga="<?php echo $row['harga_jual']; ?>"
-                                                data-stok="<?php echo $row['stok']; ?>">
-                                            <i class="bi bi-pencil"></i> <?php echo ($role == 'owner') ? 'Edit' : 'Update Stok'; ?>
-                                        </button>
+                                        <div class="btn-action-group">
+                                            <button type="button" class="btn btn-sm btn-warning text-white rounded-2" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#editModal"
+                                                    data-id="<?php echo $row['id_produk']; ?>"
+                                                    data-nama="<?php echo $row['nama_produk']; ?>"
+                                                    data-satuan="<?php echo $row['satuan']; ?>"
+                                                    data-harga="<?php echo $row['harga_jual']; ?>"
+                                                    data-stok="<?php echo $row['stok']; ?>"
+                                                    title="<?php echo ($role == 'owner') ? 'Edit Produk' : 'Update Stok'; ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
 
-                                        <?php if ($role == 'owner'): ?>
-                                        <a href="?delete=<?php echo $row['id_produk']; ?>" class="btn btn-sm btn-danger rounded-2 btn-action" onclick="return confirm('Yakin ingin menghapus produk ini?')">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
-                                        <?php endif; ?>
+                                            <?php if ($role == 'owner'): ?>
+                                            <button type="button" class="btn btn-sm btn-danger rounded-2" 
+                                                    onclick="confirmDelete('?delete=<?php echo $row['id_produk']; ?>')" title="Hapus">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endwhile; else: ?>
-                                <tr>
-                                    <td colspan="7" class="text-center py-5 text-muted">Belum ada data produk.</td>
-                                </tr>
+                                <tr><td colspan="7" class="text-center py-5 text-muted">Tidak ada data.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
+
+                <?php if ($total_pages > 1): ?>
+                <nav class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
+                            <a class="page-link" href="?page=<?php echo $page-1; ?>&q=<?php echo $q; ?>">Previous</a>
+                        </li>
+                        
+                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                            <li class="page-item <?php echo ($page == $i) ? 'active' : ''; ?>">
+                                <a class="page-link" href="?page=<?php echo $i; ?>&q=<?php echo $q; ?>"><?php echo $i; ?></a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <li class="page-item <?php echo ($page >= $total_pages) ? 'disabled' : ''; ?>">
+                            <a class="page-link" href="?page=<?php echo $page+1; ?>&q=<?php echo $q; ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+                <?php endif; ?>
+
             </div>
         </div>
     </div>
@@ -250,40 +292,17 @@ $result = $conn->query($query);
     <div class="modal fade" id="addModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Tambah Produk</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form method="POST" action="">
+                <div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold">Tambah Produk</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <form method="POST">
                     <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Nama Produk</label>
-                            <input type="text" class="form-control rounded-3" name="nama_produk" placeholder="Contoh: Nastar Keju" required>
-                        </div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Nama Produk</label><input type="text" class="form-control rounded-3" name="nama_produk" required></div>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Satuan</label>
-                                <select class="form-select rounded-3" name="satuan" required>
-                                    <option value="">-- Pilih --</option>
-                                    <option value="toples">Toples</option>
-                                    <option value="pcs">Pcs</option>
-                                    <option value="box">Box</option>
-                                    <option value="pack">Pack</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Stok Awal</label>
-                                <input type="number" class="form-control rounded-3" name="stok" value="0" min="0">
-                            </div>
+                            <div class="col-6 mb-3"><label class="form-label small fw-bold">Satuan</label><select class="form-select rounded-3" name="satuan"><option value="toples">Toples</option><option value="pcs">Pcs</option><option value="box">Box</option><option value="pack">Pack</option></select></div>
+                            <div class="col-6 mb-3"><label class="form-label small fw-bold">Stok Awal</label><input type="number" class="form-control rounded-3" name="stok" value="0"></div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Harga Jual (Rp)</label>
-                            <input type="number" class="form-control rounded-3" name="harga_jual" placeholder="0" min="0" required>
-                        </div>
+                        <div class="mb-3"><label class="form-label small fw-bold">Harga Jual</label><input type="number" class="form-control rounded-3" name="harga_jual" required></div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="submit" name="create_produk" class="btn btn-brown rounded-3 px-4">Simpan</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="create_produk" class="btn btn-brown rounded-3 px-4">Simpan</button></div>
                 </form>
             </div>
         </div>
@@ -294,53 +313,36 @@ $result = $conn->query($query);
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content rounded-4 border-0 shadow">
                 <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">
-                        <?php echo ($role == 'owner') ? 'Edit Produk' : 'Update Stok Produksi'; ?>
-                    </h5>
+                    <h5 class="modal-title fw-bold"><?php echo ($role == 'owner') ? 'Edit Produk' : 'Update Stok Produksi'; ?></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" action="">
+                <form method="POST">
                     <div class="modal-body p-4">
                         <input type="hidden" name="id_produk" id="edit_id">
-                        
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Nama Produk</label>
-                            <input type="text" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
-                                   name="nama_produk" id="edit_nama" 
-                                   <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
+                            <input type="text" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" name="nama_produk" id="edit_nama" <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
                         </div>
-                        
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-6 mb-3">
                                 <label class="form-label small fw-bold">Satuan</label>
                                 <?php if ($role == 'owner'): ?>
-                                    <select class="form-select rounded-3" name="satuan" id="edit_satuan" required>
-                                        <option value="toples">Toples</option>
-                                        <option value="pcs">Pcs</option>
-                                        <option value="box">Box</option>
-                                        <option value="pack">Pack</option>
-                                    </select>
+                                    <select class="form-select rounded-3" name="satuan" id="edit_satuan"><option value="toples">Toples</option><option value="pcs">Pcs</option><option value="box">Box</option><option value="pack">Pack</option></select>
                                 <?php else: ?>
                                     <input type="text" class="form-control rounded-3 bg-light" name="satuan" id="edit_satuan_text" readonly>
                                 <?php endif; ?>
                             </div>
-
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold text-success">Stok (Update Disini)</label>
+                            <div class="col-6 mb-3">
+                                <label class="form-label small fw-bold text-success">Stok (Update)</label>
                                 <input type="number" class="form-control rounded-3 border-success" name="stok" id="edit_stok" min="0">
                             </div>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Harga Jual (Rp)</label>
-                            <input type="number" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" 
-                                   name="harga_jual" id="edit_harga" min="0" 
-                                   <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
+                            <label class="form-label small fw-bold">Harga Jual</label>
+                            <input type="number" class="form-control rounded-3 <?php echo ($role !== 'owner') ? 'bg-light' : ''; ?>" name="harga_jual" id="edit_harga" <?php echo ($role !== 'owner') ? 'readonly' : 'required'; ?>>
                         </div>
                     </div>
-                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4">
-                        <button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">Simpan Perubahan</button>
-                    </div>
+                    <div class="modal-footer border-top-0 pt-0 px-4 pb-4"><button type="submit" name="update_produk" class="btn btn-brown rounded-3 px-4">Simpan Perubahan</button></div>
                 </form>
             </div>
         </div>
@@ -348,37 +350,33 @@ $result = $conn->query($query);
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
     <script>
-        // Modal Edit Script
         const editModal = document.getElementById('editModal');
-        editModal.addEventListener('show.bs.modal', event => {
-            const button = event.relatedTarget;
-            document.getElementById('edit_id').value = button.getAttribute('data-id');
-            document.getElementById('edit_nama').value = button.getAttribute('data-nama');
-            document.getElementById('edit_stok').value = button.getAttribute('data-stok');
-            document.getElementById('edit_harga').value = button.getAttribute('data-harga');
+        if(editModal) {
+            editModal.addEventListener('show.bs.modal', event => {
+                const btn = event.relatedTarget;
+                document.getElementById('edit_id').value = btn.getAttribute('data-id');
+                document.getElementById('edit_nama').value = btn.getAttribute('data-nama');
+                document.getElementById('edit_stok').value = btn.getAttribute('data-stok');
+                document.getElementById('edit_harga').value = btn.getAttribute('data-harga');
+                
+                const role = "<?php echo $role; ?>";
+                if(role === 'owner') document.getElementById('edit_satuan').value = btn.getAttribute('data-satuan');
+                else document.getElementById('edit_satuan_text').value = btn.getAttribute('data-satuan');
+            });
+        }
 
-            // Handle Dropdown vs Text (karena struktur beda antara owner & karyawan)
-            const role = "<?php echo $role; ?>";
-            if(role === 'owner') {
-                document.getElementById('edit_satuan').value = button.getAttribute('data-satuan');
-            } else {
-                document.getElementById('edit_satuan_text').value = button.getAttribute('data-satuan');
-            }
-        });
-
-        // SWEETALERT LOGOUT
         document.getElementById('btnLogout').addEventListener('click', function(e) {
-            e.preventDefault(); 
-            const href = this.getAttribute('href');
-            Swal.fire({
-                title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning',
-                showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Keluar', cancelButtonText: 'Batal', reverseButtons: true
-            }).then((result) => { if (result.isConfirmed) window.location.href = href; });
+            e.preventDefault(); const href = this.getAttribute('href');
+            Swal.fire({ title: 'Keluar?', text: "Sesi Anda akan berakhir.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Keluar' }).then((res) => { if (res.isConfirmed) window.location.href = href; });
         });
-    </script>
 
+        function confirmDelete(url) {
+            Swal.fire({ title: 'Hapus?', text: "Data hilang permanen!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus!' }).then((res) => { if (res.isConfirmed) window.location.href = url; });
+        }
+
+        // Tampilkan Pesan Sukses/Gagal dari PHP
+        <?php if(!empty($swal_script)) echo $swal_script; ?>
+    </script>
 </body>
 </html>

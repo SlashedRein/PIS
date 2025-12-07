@@ -2,6 +2,17 @@
 session_start();
 require_once '../../config/database.php';
 
+// Cek Login & Hak Akses
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../../login.php");
+    exit();
+}
+// Proteksi: Hanya Owner yang boleh nambah stok/pembelian (Sesuai request terakhir)
+if ($_SESSION['role'] !== 'owner') {
+    echo "<script>alert('Akses Ditolak!'); window.location='index.php';</script>";
+    exit();
+}
+
 // --- [LOGIC 1] AJAX HANDLER: QUICK ADD SUPPLIER ---
 if (isset($_POST['ajax_add_supplier'])) {
     header('Content-Type: application/json');
@@ -29,12 +40,7 @@ if (isset($_POST['ajax_add_supplier'])) {
     exit();
 }
 
-// --- [LOGIC 2] PROSES SIMPAN PEMBELIAN ---
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
-    exit();
-}
-
+// --- [LOGIC 2] PROSES SIMPAN PEMBELIAN (DENGAN LOGIKA KONVERSI) ---
 $error = '';
 
 if (isset($_POST['simpan_pembelian'])) {
@@ -42,10 +48,12 @@ if (isset($_POST['simpan_pembelian'])) {
     $tgl     = clean_input($_POST['tgl_pembelian']);
     $note    = clean_input($_POST['catatan']);
     
-    $bahan_ids = isset($_POST['id_bahan']) ? $_POST['id_bahan'] : []; 
-    $qtys      = isset($_POST['jumlah']) ? $_POST['jumlah'] : [];
-    $hargas    = isset($_POST['harga_satuan']) ? $_POST['harga_satuan'] : [];
-    
+    // Data input dari form baru
+    $bahan_ids  = isset($_POST['id_bahan']) ? $_POST['id_bahan'] : []; 
+    $qty_packs  = isset($_POST['qty_pack']) ? $_POST['qty_pack'] : [];      // Jumlah Kemasan (misal 2 bungkus)
+    $isi_packs  = isset($_POST['isi_per_pack']) ? $_POST['isi_per_pack'] : [];  // Isi per bungkus (misal 1000 gram)
+    $harga_packs= isset($_POST['harga_per_pack']) ? $_POST['harga_per_pack'] : [];// Harga per bungkus (misal 15.000)
+
     if (empty($id_supp) || empty($bahan_ids)) {
         $error = "Data supplier dan bahan tidak boleh kosong!";
     } else {
@@ -56,17 +64,33 @@ if (isset($_POST['simpan_pembelian'])) {
 
             for ($i = 0; $i < count($bahan_ids); $i++) {
                 $pid = $bahan_ids[$i];
-                $qty = $qtys[$i];
+                // Qty Pack: diizinkan pecahan (float)
+                $q_pack = (float) $qty_packs[$i]; 
                 
-                // PENTING: Hapus titik format rupiah sebelum simpan ke DB
-                // Contoh: "15.000" jadi "15000"
-                $raw_harga = $hargas[$i];
-                $prc = (float) str_replace('.', '', $raw_harga); 
+                // Isi per pack: diizinkan format ribuan (misal 1.000), harus dihapus titiknya, diizinkan pecahan
+                $isi_pack = (float) str_replace('.', '', $isi_packs[$i]); 
+                
+                // Harga per pack: diizinkan format ribuan, harus dihapus titiknya, harus integer (untuk rupiah)
+                $h_pack = (float) str_replace('.', '', $harga_packs[$i]);
 
-                if(!empty($pid) && $qty > 0) {
-                    $sub = $prc * $qty;
-                    $grand_total += $sub;
-                    $items_fix[] = ['id' => $pid, 'qty' => $qty, 'harga' => $prc, 'sub' => $sub];
+                if(!empty($pid) && $q_pack > 0 && $isi_pack > 0) {
+                    // HITUNG LOGIKA KONVERSI
+                    // 1. Total Rupiah (Subtotal) = Jumlah Bungkus * Harga Bungkus
+                    $subtotal = $q_pack * $h_pack;
+                    $grand_total += $subtotal;
+
+                    // 2. Total Stok Masuk (Gram/Pcs) = Jumlah Bungkus * Isi per Bungkus
+                    $total_stok_masuk = $q_pack * $isi_pack;
+
+                    // 3. Harga Satuan per Gram/Pcs (Untuk Database HPP)
+                    $harga_satuan_db = ($total_stok_masuk > 0) ? ($subtotal / $total_stok_masuk) : 0;
+
+                    $items_fix[] = [
+                        'id' => $pid, 
+                        'qty_db' => $total_stok_masuk, // Masuk ke kolom 'jumlah' (stok)
+                        'harga_db' => $harga_satuan_db, // Masuk ke kolom 'harga_satuan' (HPP per gram/pcs)
+                        'sub' => $subtotal // Masuk ke kolom 'sub_total'
+                    ];
                 }
             }
 
@@ -86,14 +110,12 @@ if (isset($_POST['simpan_pembelian'])) {
             $stmt_stok = $conn->prepare("UPDATE bahan_baku SET stok = stok + ? WHERE id_bahan = ?");
 
             foreach ($items_fix as $item) {
-                // Masuk Detail
-                $stmt_detail->bind_param("iiidd", $id_beli, $item['id'], $item['qty'], $item['harga'], $item['sub']);
-                if (!$stmt_detail->execute()) {
-                    throw new Exception("Gagal menyimpan detail item: " . $stmt_detail->error);
-                }
+                // Masuk Detail (jumlah, harga_satuan, sub_total menggunakan nilai konversi)
+                $stmt_detail->bind_param("iiidd", $id_beli, $item['id'], $item['qty_db'], $item['harga_db'], $item['sub']);
+                $stmt_detail->execute();
 
-                // Tambah Stok
-                $stmt_stok->bind_param("ii", $item['qty'], $item['id']);
+                // Tambah Stok (menggunakan qty_db = total stok dalam satuan terkecil)
+                $stmt_stok->bind_param("ii", $item['qty_db'], $item['id']);
                 $stmt_stok->execute();
             }
 
@@ -135,8 +157,10 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
     
     <style>
         .text-brown { color: var(--primary-color) !important; }
+        /* Style untuk Select2 agar lebih rapi */
         .select2-container .select2-selection--single { height: 31px !important; font-size: 0.85rem; }
         .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { padding-top: 2px; }
+        .input-group-text { font-size: 0.8rem; background: #f8f9fa; }
     </style>
 </head>
 <body>
@@ -214,17 +238,18 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                         <table class="table table-bordered table-sm align-middle mb-0">
                             <thead class="table-light text-center small">
                                 <tr>
-                                    <th style="width: 35%;">Bahan Baku</th>
-                                    <th style="width: 20%;">Harga Beli (Rp)</th>
-                                    <th style="width: 12%;">Jumlah</th>
-                                    <th style="width: 23%;">Subtotal</th>
-                                    <th style="width: 10%;">Aksi</th>
+                                    <th style="width: 30%;">Bahan Baku</th>
+                                    <th style="width: 20%;">Harga/Kemasan (Rp)</th>
+                                    <th style="width: 12%;">Jml Beli</th>
+                                    <th style="width: 18%;">Isi per Kemasan</th>
+                                    <th style="width: 20%;">Subtotal</th>
+                                    <th style="width: 5%;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="cartBody"></tbody>
                             <tfoot>
                                 <tr class="bg-light">
-                                    <td colspan="3" class="text-end fw-bold py-2 small">TOTAL PEMBELIAN :</td>
+                                    <td colspan="4" class="text-end fw-bold py-2 small">TOTAL PEMBELIAN :</td>
                                     <td colspan="2" class="py-2 text-end">
                                         <h5 class="fw-bold text-primary m-0" id="grandTotal" style="font-size:1.1rem;">Rp 0</h5>
                                     </td>
@@ -292,10 +317,9 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
         });
 
         // --- 1. EVENT DELEGATION UNTUK HITUNG OTOMATIS ---
-        // Ini kuncinya: Biar baris baru pun eventnya tetap jalan
         
-        // Format Rupiah saat mengetik harga
-        $(document).on('keyup', '.price', function() {
+        // Format Angka (Harga/Isi) saat mengetik
+        $(document).on('keyup', '.format-angka', function() {
             let val = $(this).val().replace(/\D/g, ''); // Ambil angka saja
             if (val === '') {
                 $(this).val('');
@@ -305,26 +329,34 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
             calcTotal(); // Hitung ulang
         });
 
-        // Hitung ulang saat Qty berubah
-        $(document).on('input change', '.qty', function() {
+        // Hitung ulang saat Qty Beli berubah
+        $(document).on('input change', '.qty-pack', function() {
             calcTotal();
         });
+        
+        // Update Satuan Label saat memilih bahan
+        $(document).on('select2:select', '.select2-bahan', function(e){
+            let satuan = $(this).find(':selected').data('satuan');
+            $(this).closest('tr').find('.satuan-label').text(satuan);
+        });
 
-        // --- 2. FUNGSI HITUNG TOTAL ---
+        // --- 2. FUNGSI HITUNG TOTAL (KONVERSI) ---
         function calcTotal() {
             let total = 0;
             $('#cartBody tr').each(function() {
                 const row = $(this);
                 
-                // Ambil Harga (Hapus titik dulu)
-                let priceRaw = row.find('.price').val() || '0';
-                let price = parseInt(priceRaw.replace(/\./g, '')) || 0;
+                // Ambil Harga per Pack (Hapus titik dulu)
+                let hPackRaw = row.find('.harga-pack').val() || '0';
+                let hPack = parseInt(hPackRaw.replace(/\./g, '')) || 0;
                 
-                // Ambil Qty
-                let qty = parseInt(row.find('.qty').val()) || 0;
+                // Ambil Qty Pack (diizinkan pecahan)
+                let qPack = parseFloat(row.find('.qty-pack').val()) || 0;
                 
                 // Hitung Subtotal
-                let sub = price * qty;
+                let sub = hPack * qPack;
+                
+                // Tampilkan Subtotal
                 row.find('.sub').val(sub.toLocaleString('id-ID'));
                 
                 total += sub;
@@ -335,7 +367,8 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
         // --- 3. FUNGSI TAMBAH BARIS ---
         function addRow() {
             let options = '<option value="">-- Cari Bahan --</option>';
-            bahans.forEach(b => options += `<option value="${b.id_bahan}">${b.nama_bahan} (${b.satuan})</option>`);
+            // Tambahkan data-satuan ke opsi untuk JS update label
+            bahans.forEach(b => options += `<option value="${b.id_bahan}" data-satuan="${b.satuan}">${b.nama_bahan} (${b.satuan})</option>`);
             
             const tr = `
                 <tr>
@@ -345,11 +378,22 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                         </select>
                     </td>
                     <td>
-                        <input type="text" name="harga_satuan[]" class="form-control form-control-sm text-end price" 
-                               placeholder="0"> </td>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">Rp</span>
+                            <input type="text" name="harga_per_pack[]" class="form-control text-end format-angka harga-pack" 
+                                   placeholder="0" required>
+                        </div>
+                    </td>
                     <td>
-                        <input type="number" name="jumlah[]" class="form-control form-control-sm text-center qty" 
-                               min="1" value="1" required>
+                        <input type="number" name="qty_pack[]" class="form-control form-control-sm text-center qty-pack" 
+                               min="0.1" step="any" value="1" required>
+                    </td>
+                    <td>
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="isi_per_pack[]" class="form-control text-end format-angka isi-pack" 
+                                   placeholder="1" value="1" required>
+                            <span class="input-group-text satuan-label" style="min-width: 50px; justify-content: center;">Unit</span>
+                        </div>
                     </td>
                     <td>
                         <input type="text" class="form-control form-control-sm bg-light text-end sub" readonly placeholder="0">
@@ -375,10 +419,12 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                 $(btn).closest('tr').remove();
                 calcTotal();
             } else {
+                // Reset baris terakhir
                 const row = $(btn).closest('tr');
                 row.find('select').val(null).trigger('change');
-                row.find('input').val('');
-                row.find('.qty').val(1);
+                row.find('input[type="text"]').val('');
+                row.find('.qty-pack').val(1);
+                row.find('.satuan-label').text('Unit');
                 calcTotal();
             }
         }
@@ -393,9 +439,15 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
                 return;
             }
 
+            // Cek apakah ada item yang dipilih
+            if ($('#cartBody tr').length === 0 || $('#cartBody').find('.select2-bahan').filter(function() { return $(this).val(); }).length === 0) {
+                 Swal.fire('Error', 'Belum ada item bahan baku yang valid.', 'error');
+                 return;
+            }
+
             Swal.fire({
                 title: 'Simpan Pembelian?',
-                text: "Stok bahan baku akan bertambah otomatis.",
+                text: "Stok bahan baku akan bertambah berdasarkan konversi yang diinput.",
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#8B4513',
@@ -459,8 +511,12 @@ while($b = $bahans->fetch_assoc()) { $js_bahans[] = $b; }
         const btnMobile = document.getElementById('btnMobileToggle');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
-        if(btnMobile) { btnMobile.addEventListener('click', () => { sidebar.classList.add('show'); overlay.classList.add('show'); }); }
-        if(overlay) { overlay.addEventListener('click', () => { sidebar.classList.remove('show'); overlay.classList.remove('show'); }); }
+        // Pastikan overlay ada di HTML includes/sidebar.php atau custom.css
+        if(btnMobile) { 
+            btnMobile.addEventListener('click', () => { 
+                document.body.classList.add('sidebar-toggled'); 
+            }); 
+        }
     </script>
 </body>
 </html>

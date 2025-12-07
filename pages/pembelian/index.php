@@ -60,7 +60,7 @@ if (isset($_GET['delete'])) {
 
     $id_beli = clean_input($_GET['delete']);
     
-    // Ambil item untuk kembalikan stok (karena pembelian dihapus, stok harus dikurangi lagi)
+    // Ambil item untuk kembalikan stok
     $query_items = "SELECT id_bahan, jumlah FROM detail_pembelian WHERE id_beli = ?";
     $stmt_items = $conn->prepare($query_items);
     $stmt_items->bind_param("i", $id_beli);
@@ -124,6 +124,18 @@ $result = $conn->query($query);
         .text-brown { color: var(--primary-color) !important; }
         .btn-brown { background-color: var(--primary-color); color: white; border: none; }
         .btn-brown:hover { background-color: #6F3410; color: white; }
+        
+        /* FIX TOMBOL BERANTAKAN DI MOBILE */
+        .btn-group-action {
+            display: flex;
+            gap: 4px;
+            justify-content: flex-end;
+            flex-wrap: wrap; /* Agar turun ke bawah kalau sempit */
+        }
+        .btn-group-action .btn {
+            padding: 4px 8px; /* Perkecil padding */
+            font-size: 0.8rem; /* Perkecil font */
+        }
     </style>
 </head>
 <body>
@@ -166,9 +178,11 @@ $result = $conn->query($query);
                 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                     <h5 class="fw-bold text-brown m-0">Daftar Pembelian Bahan</h5>
                     
+                    <?php if ($role == 'owner'): ?>
                     <a href="create.php" class="btn-add text-decoration-none">
                         <i class="bi bi-plus-lg"></i> Pembelian Baru
                     </a>
+                    <?php endif; ?>
                 </div>
 
                 <form method="GET" action="" class="mb-4">
@@ -203,7 +217,7 @@ $result = $conn->query($query);
                                 <th>Supplier</th>
                                 <th>Item</th>
                                 <th>Total Pembelian</th>
-                                <th>Aksi</th>
+                                <th class="text-end">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -216,19 +230,27 @@ $result = $conn->query($query);
                                     <td><?php echo $row['jumlah_item']; ?> jenis</td>
                                     <td><strong class="text-primary"><?php echo format_rupiah($row['total_beli']); ?></strong></td>
                                     <td>
-                                        <button class="btn btn-sm btn-info text-white shadow-sm" 
-                                                onclick="showDetail(<?php echo $row['id_beli']; ?>, '<?php echo $row['nama_supplier']; ?>')" title="Lihat Detail">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
-                                        
-                                        <?php if ($role == 'owner'): ?>
-                                            <a href="edit.php?id=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-warning text-white shadow-sm" title="Edit">
-                                                <i class="bi bi-pencil"></i>
-                                            </a>
-                                            <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus">
-                                                <i class="bi bi-trash"></i>
-                                            </a>
-                                        <?php endif; ?>
+                                        <div class="btn-group-action">
+                                            <button class="btn btn-info text-white shadow-sm" 
+                                                    onclick="showDetail(<?php echo $row['id_beli']; ?>, '<?php echo $row['nama_supplier']; ?>')" title="Lihat Detail">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            
+                                            <?php if ($role == 'owner'): ?>
+                                                <a href="struk.php?id=<?php echo $row['id_beli']; ?>" target="_blank" class="btn btn-secondary text-white shadow-sm" title="Cetak Struk">
+                                                    <i class="bi bi-printer"></i>
+                                                </a>
+                                            <?php endif; ?>
+
+                                            <?php if ($role == 'owner'): ?>
+                                                <a href="edit.php?id=<?php echo $row['id_beli']; ?>" class="btn btn-warning text-white shadow-sm" title="Edit">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                                <a href="?delete=<?php echo $row['id_beli']; ?>" class="btn btn-outline-danger" onclick="return confirm('Hapus transaksi pembelian ini? Stok akan dikurangi kembali.')" title="Hapus">
+                                                    <i class="bi bi-trash"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
@@ -276,8 +298,6 @@ $result = $conn->query($query);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // NOTE: Sidebar toggle sudah include di sidebar.php
-
         // Detail AJAX
         function showDetail(idBeli, suppName) {
             $('#detailSuppName').text(suppName);
